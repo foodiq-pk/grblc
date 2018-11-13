@@ -22,7 +22,7 @@ class DataStructure(ABC):
 
     def check_required_input_parameters(self, parameters: dict):
         """
-        check for legal input in image constructor
+        Checks for legal input in image constructor.
         :param parameters: parameter dictionary
         :return: bool, whether input is legal
         """

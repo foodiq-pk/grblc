@@ -1,14 +1,15 @@
-from abc import ABC
-import pyfits
-from data_tier_placeholder.image import Image
-from data_tier_placeholder.object import Object
-import numpy as np
 import os
-from config import Config
+from abc import ABC
+
+import numpy as np
+import pyfits
 from astropy.io import fits
 from astropy.wcs import WCS
-
 from stsci.tools import capable
+
+from config import Config
+from data_tier_placeholder.image import Image
+from data_tier_placeholder.object import Object
 
 
 class BaseTransform(ABC):
@@ -17,18 +18,27 @@ class BaseTransform(ABC):
     PROVIDES = []
 
     def transform(self, image: Image):
+        """
+        Applies transformation to an image
+        :param image: Image
+        :return: modified Image / does not copy
+        """
         raise NotImplementedError
 
     def requirements_check(self, image: Image):
+        """
+        Checks for necessary prerequisites for given transformation.
+        :param image: Image
+        :return: False if image is missing any of the required transformation
+        """
         return False not in [req in image.processing_parameters for req in self.REQUIRES]
 
 
 class FlatTransform(BaseTransform):
     """
-    Transform that applies flat image correction.
+    Transform that applies flat field correction.
 
-    Requires image to be corrected by dark images.
-
+    Must be initialized with master flat Image object or with create_master_flat function to create one
     Gives option to create master flat image from flat images using static method "create_master_flat"
 
     """
@@ -40,9 +50,10 @@ class FlatTransform(BaseTransform):
         self.flat = image[0].data
 
     @staticmethod
-    def create_master_flat(images: [Image], save_path: str =Config.DARK_PATH):
+    def create_master_flat(images: [Image], save_path: str =Config.FLAT_PATH):
         """
-        Static method to create master flat from given flat images, with option to save output, default save is /tmp/
+        Static method to create master flat from given flat images. Save path specified in Config.FLAT_PATH
+
         :param images: Flat images list
         :param save_path: Optional save path
         :return: master flat as Image type object
@@ -73,7 +84,9 @@ class FlatTransform(BaseTransform):
 
 class DarkTransform(BaseTransform):
     """
-    Transform that applies dark frame correction.
+    Transform that subtracts dark current from image.
+
+    Must be initialized with master dark Image object or with create_master_dark function to create one
     Gives option to create master flat frame using static method "create_master_dark"
     """
     REQUIRES = []
@@ -86,7 +99,8 @@ class DarkTransform(BaseTransform):
     @staticmethod
     def create_master_dark(images: [Image], save_path=Config.DARK_PATH):
         """
-        Static method to create master dark from given flat images, with option to save output, default save is /tmp/
+        Static method to create master flat from given flat images. Save path specified in Config.DARK_PATH
+
         :param images: Dark images list
         :param save_path: Optional save path
         :return: master flat as Image type object
@@ -102,11 +116,7 @@ class DarkTransform(BaseTransform):
         return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path})
 
     def transform(self, image: Image):
-        """
 
-        :param image:
-        :return:
-        """
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         img = pyfits.open(image.fixed_parameters["path"])
@@ -134,7 +144,8 @@ class PyrafPhotometryTransform(BaseTransform):
         self.objects = object_list
 
     def get_coordinates_file(self, image: Image):
-        """ Creates coordinates file for photometry
+        """ Creates coordinates file for photometry using wcs coordinates in FITS header.
+
         :return: filename
         """
         filename = Config.FILE_DUMP + "xy_coords_file.txt"
@@ -152,11 +163,7 @@ class PyrafPhotometryTransform(BaseTransform):
         return filename
 
     def transform(self, image: Image):
-        """
 
-        :param image:
-        :return:
-        """
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         # INIT
@@ -200,7 +207,7 @@ class PyrafPhotometryTransform(BaseTransform):
             results = {}
             i = 0
             for lines in output_file:
-                results[self.objects[i].objects[i].fixed_parameters["id"]] = (float(lines.split()[2]), float(lines.split()[3]))
+                results[self.objects[i].fixed_parameters["id"]] = (float(lines.split()[2]), float(lines.split()[3]))
                 i += 1
 
         image.processing_parameters["photometry"] = results
