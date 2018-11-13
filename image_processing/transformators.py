@@ -1,8 +1,14 @@
 from abc import ABC
 import pyfits
 from data_tier_placeholder.image import Image
+from data_tier_placeholder.object import Object
 import numpy as np
 import os
+from config import Config
+from astropy.io import fits
+from astropy.wcs import WCS
+
+from stsci.tools import capable
 
 
 class BaseTransform(ABC):
@@ -34,7 +40,7 @@ class FlatTransform(BaseTransform):
         self.flat = image[0].data
 
     @staticmethod
-    def create_master_flat(images: [Image], save_path: str ="/tmp/temp_master_flat.fits"):
+    def create_master_flat(images: [Image], save_path: str =Config.DARK_PATH):
         """
         Static method to create master flat from given flat images, with option to save output, default save is /tmp/
         :param images: Flat images list
@@ -78,7 +84,7 @@ class DarkTransform(BaseTransform):
         self.dark = image[0].data
 
     @staticmethod
-    def create_master_dark(images: [Image], save_path='/tmp/temp_master_dark.fits'):
+    def create_master_dark(images: [Image], save_path=Config.DARK_PATH):
         """
         Static method to create master dark from given flat images, with option to save output, default save is /tmp/
         :param images: Dark images list
@@ -96,6 +102,11 @@ class DarkTransform(BaseTransform):
         return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path})
 
     def transform(self, image: Image):
+        """
+
+        :param image:
+        :return:
+        """
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         img = pyfits.open(image.fixed_parameters["path"])
@@ -107,45 +118,136 @@ class DarkTransform(BaseTransform):
         image.processing_parameters["dark"] = True
 
 
-class PhotometryTransform(BaseTransform):
+class PyrafPhotometryTransform(BaseTransform):
+    """
+    Transform that does daophot tast from IRAF on image with objects specified in inicialization.
 
-    def __init__(self):
-        pass
-        # TODO
+    Must be initialized with object list of Object type.
+    Writes result in processed parameteres as photometry entry.
+    ** TODO:
+        - Writing results to objects
+    """
+    REQUIRES = ["dark", "flat"]
+    PROVIDES = ["photometry"]
+
+    def __init__(self, object_list: [Object]):
+        self.objects = object_list
+
+    def get_coordinates_file(self, image: Image):
+        """ Creates coordinates file for photometry
+        :return: filename
+        """
+        filename = Config.FILE_DUMP + "xy_coords_file.txt"
+        header = fits.getheader(image.fixed_parameters["path"])
+        w = WCS(header)
+        pixel_coordinates = []
+
+        for o in self.objects:
+            x, y = w.wcs_world2pix(o.fixed_parameters['ra'],
+                                   o.fixed_parameters['dec'])
+
+            pixel_coordinates.append([float(x),
+                                      float(y)])
+        np.savetxt(filename, pixel_coordinates)
+        return filename
 
     def transform(self, image: Image):
-        pass
-        # TODO
+        """
+
+        :param image:
+        :return:
+        """
+        if not self.requirements_check(image):
+            raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
+        # INIT
+        from pyraf import iraf
+        iraf.noao.digiphot(_doprint=0)
+        iraf.noao.digiphot.daophot(_doprint=0)
+        capable.OF_GRAPHICS = False
+
+        # File handling
+        temp_final_out = Config.FILE_DUMP + 'TempPhotOut.dat'
+        if os.path.exists(temp_final_out):
+            os.remove(temp_final_out)
+
+        base = image.fixed_parameters["path"].split("-").split('/')[-1]
+        dao_phot_out = Config.FILE_DUMP + base + ".mag.dat"
+        phot_txt_out = Config.FILE_DUMP + base + "PhoTxOut.dat"
+
+        # Setting pyraf phot parameters
+        photpars = iraf.photpars.getParList()
+        iraf.photpars.setParam('apertures', Config.APERTURE)
+        iraf.phot.setParam('image', image.fixed_parameters["path"])
+        iraf.phot.setParam('coords', self.get_coordinates_file(image))
+        iraf.phot.setParam('verify', 'no')
+        iraf.phot.setParam('output', dao_phot_out)
+        iraf.phot.setParam('interactive', 'no')
+
+        if os.path.exists(dao_phot_out):
+            os.remove(dao_phot_out)
+
+        # Running IRAF task
+        dump = iraf.phot(mode='h', Stdout=1)
+
+        if os.path.exists(phot_txt_out):
+            os.remove(phot_txt_out)
+
+        # Getting better formatted file with magnitudes
+        iraf.txdump(dao_phot_out, 'XCENTER,YCENTER,MAG,MERR', 'yes', Stdout=phot_txt_out)
+
+        # Getting results from output file
+        with open(phot_txt_out) as output_file:
+            results = {}
+            i = 0
+            for lines in output_file:
+                results[self.objects[i].objects[i].fixed_parameters["id"]] = (float(lines.split()[2]), float(lines.split()[3]))
+                i += 1
+
+        image.processing_parameters["photometry"] = results
 
 
 class ShiftTransform(BaseTransform):
 
+    REQUIRES = ["photometry"]
+    PROVIDES = ["shift"]
+
     def __init__(self):
         pass
         # TODO
 
     def transform(self, image: Image):
-        pass
+        if not self.requirements_check(image):
+            raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         # TODO
 
 
 class StackTransform(BaseTransform):
+
+    REQUIRES = ["dark", "flat"]
+    PROVIDES = ["stack"]
 
     def __init__(self):
         pass
     # TODO
 
     def transform(self, image: Image):
+        if not self.requirements_check(image):
+            raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         pass
         # TODO
 
 
 class CalibrateTransform(BaseTransform):
 
+    REQUIRES = ["shift"]
+    PROVIDES = ["lightcurve"]  # << ??
+
     def __init__(self):
         pass
         # TODO
 
     def transform(self, image: Image):
+        if not self.requirements_check(image):
+            raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         pass
         # TODO

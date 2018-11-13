@@ -6,7 +6,7 @@ class Object(DataStructure):
 
     """
 
-    REQUIRES = ["ra", "dec", "catalog_magnitude"]
+    REQUIRES = ["ra", "dec", "catalog_magnitude", "id"]
     # TODO difference between GRB and stars
 
     def __init__(self, fixed_parameters: dict, processing_parameters: dict = {}):

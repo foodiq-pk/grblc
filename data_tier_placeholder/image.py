@@ -5,7 +5,7 @@ class Image(DataStructure):
     """
     Image class data object, contains
     """
-    REQUIRES = ["time_jd", "exposure", "path", "type"]
+    REQUIRES = ["time_jd", "exposure", "path", "type", "id"]
 
     def __init__(self, fixed_parameters: dict, processing_parameters: dict = {}):
         super().__init__(fixed_parameters, processing_parameters)
