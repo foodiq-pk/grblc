@@ -10,4 +10,8 @@ class Image(DataStructure):
     def __init__(self, fixed_parameters: dict, processing_parameters: dict = {}):
         super().__init__(fixed_parameters, processing_parameters)
 
+    def print_info(self):
+        print(self.fixed_parameters,
+              self.processing_parameters)
+
 
