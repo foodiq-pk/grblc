@@ -17,7 +17,7 @@ class DataStructure(ABC):
         if self.check_required_input_parameters(fixed_parameters):
             self.fixed_parameters = fixed_parameters
         else:
-            raise ValueError("Missing one or more required parameters: time_jd,exposure,path")
+            raise ValueError("Missing one or more required parameters.")
         self.processing_parameters = processing_parameters
 
     def check_required_input_parameters(self, parameters: dict):

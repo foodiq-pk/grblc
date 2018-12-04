@@ -9,7 +9,7 @@ from stsci.tools import capable
 
 from config import Config
 from data_tier_placeholder.image import Image
-from data_tier_placeholder.object import Object
+from data_tier_placeholder.skyobject import SkyObject
 
 
 class BaseTransform(ABC):
@@ -53,7 +53,7 @@ class FlatTransform(BaseTransform):
     def create_master_flat(images: [Image], save_path: str =Config.FLAT_PATH):
         """
         Static method to create master flat from given flat images. Save path specified in Config.FLAT_PATH
-
+        Overwrites flat image in Config.FLAT_PATH !
         :param images: Flat images list
         :param save_path: Optional save path
         :return: master flat as Image type object
@@ -61,24 +61,28 @@ class FlatTransform(BaseTransform):
         counter = 0
         values = []
         for image in images:
-            values.append(pyfits.open(image.fixed_parameters["path"]))
+            values.append(pyfits.open(image.fixed_parameters["path"])[0].data)
             counter += 1
         flat_data = np.median(values, axis=0)
         flat_data = flat_data / np.mean(flat_data)
         hdu = pyfits.PrimaryHDU(flat_data)
+        if os.path.exists(Config.FLAT_PATH):
+            os.remove(Config.FLAT_PATH)
         hdu.writeto(save_path)
-        return Image({"time_jd": 0, "exposure": 0, "type": "flat", "path": save_path})
+        return Image({"time_jd": 0, "exposure": 0, "type": "flat", "path": save_path, "id": "mflat"}, {})
 
     def transform(self, image: Image):
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
+        if "flat" in image.processing_parameters:
+            raise AttributeError("flat correction already applied")
         img = pyfits.open(image.fixed_parameters["path"])
         values = img[0].data/self.flat
         header = img[0].header
-        old_path = img.fixed_parameters["path"]
-        img.fixed_parameters["path"] = old_path[:5] + "f.fits"
-        pyfits.writeto(img.fixed_parameters["path"], values, header)
-        os.remove(old_path)
+        old_path = image.fixed_parameters["path"]
+        image.fixed_parameters["path"] = old_path[:-5] + "f.fits"
+        pyfits.writeto(image.fixed_parameters["path"], values, header)
+        # os.remove(old_path) TODO: delete old?
         image.processing_parameters["flat"] = True
 
 
@@ -108,23 +112,27 @@ class DarkTransform(BaseTransform):
         counter = 0
         values = []
         for image in images:
-            values.append(pyfits.open(image.fixed_parameters["path"]))
+            values.append(pyfits.open(image.fixed_parameters["path"])[0].data)
             counter += 1
         dark_data = np.median(values, axis=0)
         hdu = pyfits.PrimaryHDU(dark_data)
+        if os.path.exists(Config.FLAT_PATH):
+            os.remove(Config.FLAT_PATH)
         hdu.writeto(save_path)
-        return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path})
+        return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path, "id": "mdark"}, {})
 
     def transform(self, image: Image):
 
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
+        if "dark" in image.processing_parameters:
+            raise AttributeError("dark correction already applied")
         img = pyfits.open(image.fixed_parameters["path"])
         values = img[0].data - self.dark
         header = img[0].header
-        old_path = img.fixed_parameters["path"]
-        img.fixed_parameters["path"] = old_path[:5] + "d.fits"
-        pyfits.writeto(img.fixed_parameters["path"], values, header)
+        old_path = image.fixed_parameters["path"]
+        image.fixed_parameters["path"] = old_path[:-5] + "d.fits"
+        pyfits.writeto(image.fixed_parameters["path"], values, header)
         image.processing_parameters["dark"] = True
 
 
@@ -140,7 +148,7 @@ class PyrafPhotometryTransform(BaseTransform):
     REQUIRES = ["dark", "flat"]
     PROVIDES = ["photometry"]
 
-    def __init__(self, object_list: [Object]):
+    def __init__(self, object_list: [SkyObject]):
         self.objects = object_list
 
     def get_coordinates_file(self, image: Image):

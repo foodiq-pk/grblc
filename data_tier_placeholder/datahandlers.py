@@ -1,10 +1,14 @@
 from abc import ABC
-from data_tier_placeholder.object import Object
+from data_tier_placeholder.skyobject import SkyObject
 from data_tier_placeholder.image import Image
 import glob
 import pyfits
 import sys
 import os
+from astroquery.vizier import Vizier  # for vizier queries (NOMAD - includes USNO astrometry catalogue)
+
+import astropy.units as u
+import astropy.coordinates as coord
 
 
 class InvalidQueryError(Exception):
@@ -88,7 +92,7 @@ class FileHandler(BasicHandler):
     """
 
     def __init__(self, path: str, query: str):
-        super().__init__(query, path)
+        super().__init__(path, query)
         squery = query.split(" ")
         if len(squery) == 2:  # Query + data type
             self.query = squery[0]
@@ -163,8 +167,115 @@ class DatabaseHandler(BasicHandler):
     # TODO
 
     @staticmethod
-    def save_objects_and_images(image_list: [Image], object_list: [Object]):
+    def save_objects_and_images(image_list: [Image], object_list: [SkyObject]):
         """Saving to database file using SQL Alchemy"""
         pass
     # TODO
 
+
+class ObjectHandler:
+    """Handler to create list of objects in specified vicinity of given target
+
+    Supported catalogues:
+        APASS
+        NOMAD
+
+    Usage:
+        If not specified the default values for area around target coordinates are:
+            radius = 0.1 degrees
+            catalog: APASS
+            lower magnitude limit: 16 mag
+            maximum objects is 100
+
+        Initialize with target object (GRB) and specify result limit if necessary. You can change default values in
+        get_list() call as follows:
+
+            ObjectHandler(target).get_list(mag_limit = 20, catalog= "NOMAD", radius = 2 * u.deg)
+
+         * - Units for radius are in degrees
+
+    """
+    # TODO Static methods?
+
+    def __init__(self, target: SkyObject, result_limit=100):
+        self.target = target
+        self.limit = result_limit
+
+    def get_list(self, mag_limit=16., catalog="APASS", radius=0.1,):
+        """
+
+        :param mag_limit: float
+        :param catalog: catalog name string
+        :param radius: radius in degrees
+        :return: Object type list with target and objects in specified vicinity
+        """
+        if catalog == "APASS":
+            return self.vizier_query_object_list_apass(self.target, radius, mag_limit)
+        if catalog == "NOMAD":
+            return self.vizier_query_object_list_nomad(self.target, radius, mag_limit)
+        else:
+            raise ValueError("Unsupported or invalid catalogue name")
+
+    def vizier_query_object_list_apass(self, target: SkyObject, radius, mag_limit):
+        """
+        Creates object list from vizier APASS query
+
+        :param target: Center point around which to query for object
+        :param radius: radius of area around central object in degrees
+        :param mag_limit: limiting lower magnitude for star selection
+        :return: list of objects and the GRB
+        """
+        vizier_query = Vizier(columns=['RAJ2000', 'DEJ2000', 'Vmag','e_Vmag'],
+                              column_filters={"Vmag": "<"+str(mag_limit)},
+                              row_limit= self.limit)
+        coordinates = coord.SkyCoord(target.fixed_parameters["ra"],
+                                     target.fixed_parameters["dec"],
+                                     unit=(u.deg, u.deg),
+                                     frame='icrs')
+        result = vizier_query.query_region(coordinates,
+                                           radius=radius * u.deg,
+                                           catalog="APASS")
+
+        object_list = [target]
+        i = 1
+        for o in result[0]:
+            object_list.append(SkyObject({"ra": o['RAJ2000'],
+                                          "dec": o['DEJ2000'],
+                                          "catalog_magnitude": (o['Vmag'], o['e_Vmag']),
+                                          "id": i,
+                                          "type": "star"}))
+            i += 1
+
+        return object_list
+
+    def vizier_query_object_list_nomad(self, target: SkyObject, radius, mag_limit):
+        """
+        Creates object list from vizier NOMAD query
+
+        :param target: Center point around which to query for object
+        :param radius: radius of area around central object in degrees
+        :param mag_limit: limiting lower magnitude for star selection
+        :return: list of objects and the GRB
+        """
+        vizier_query = Vizier(columns=['RAJ2000', 'DEJ2000', 'Vmag'],
+                              column_filters={"Vmag": "<"+str(mag_limit)},
+                              row_limit=self.limit)
+        coordinates = coord.SkyCoord(target.fixed_parameters["ra"],
+                                     target.fixed_parameters["dec"],
+                                     unit=(u.deg, u.deg),
+                                     frame='icrs')
+        result = vizier_query.query_region(coordinates,
+                                           radius=radius * u.deg,
+                                           catalog="NOMAD")
+
+        object_list = [target]
+        i = 1
+        for o in result[0]:
+            object_list.append(SkyObject({"ra": o['RAJ2000'],
+                                          "dec": o['DEJ2000'],
+                                          "catalog_magnitude": (o['Vmag'], o['e_Vmag']),
+                                          "id": i,
+                                          "type": "star"}))
+            i += 1
+
+        return object_list
