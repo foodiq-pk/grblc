@@ -116,8 +116,8 @@ class DarkTransform(BaseTransform):
             counter += 1
         dark_data = np.median(values, axis=0)
         hdu = pyfits.PrimaryHDU(dark_data)
-        if os.path.exists(Config.FLAT_PATH):
-            os.remove(Config.FLAT_PATH)
+        if os.path.exists(Config.DARK_PATH):
+            os.remove(Config.DARK_PATH)
         hdu.writeto(save_path)
         return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path, "id": "mdark"}, {})
 
@@ -163,7 +163,7 @@ class PyrafPhotometryTransform(BaseTransform):
 
         for o in self.objects:
             x, y = w.wcs_world2pix(o.fixed_parameters['ra'],
-                                   o.fixed_parameters['dec'])
+                                   o.fixed_parameters['dec'], 1)
 
             pixel_coordinates.append([float(x),
                                       float(y)])
@@ -185,7 +185,7 @@ class PyrafPhotometryTransform(BaseTransform):
         if os.path.exists(temp_final_out):
             os.remove(temp_final_out)
 
-        base = image.fixed_parameters["path"].split("-").split('/')[-1]
+        base = image.fixed_parameters["path"].split('/')[-1]
         dao_phot_out = Config.FILE_DUMP + base + ".mag.dat"
         phot_txt_out = Config.FILE_DUMP + base + "PhoTxOut.dat"
 

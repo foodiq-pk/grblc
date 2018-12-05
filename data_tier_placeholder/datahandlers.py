@@ -5,7 +5,7 @@ import glob
 import pyfits
 import sys
 import os
-from astroquery.vizier import Vizier  # for vizier queries (NOMAD - includes USNO astrometry catalogue)
+from astroquery.vizier import Vizier
 
 import astropy.units as u
 import astropy.coordinates as coord
