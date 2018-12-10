@@ -84,6 +84,7 @@ class FlatTransform(BaseTransform):
         pyfits.writeto(image.fixed_parameters["path"], values, header)
         # os.remove(old_path) TODO: delete old?
         image.processing_parameters["flat"] = True
+        return image
 
 
 class DarkTransform(BaseTransform):
@@ -134,6 +135,7 @@ class DarkTransform(BaseTransform):
         image.fixed_parameters["path"] = old_path[:-5] + "d.fits"
         pyfits.writeto(image.fixed_parameters["path"], values, header)
         image.processing_parameters["dark"] = True
+        return image
 
 
 class PyrafPhotometryTransform(BaseTransform):
@@ -215,10 +217,13 @@ class PyrafPhotometryTransform(BaseTransform):
             results = {}
             i = 0
             for lines in output_file:
-                results[self.objects[i].fixed_parameters["id"]] = (float(lines.split()[2]), float(lines.split()[3]))
+                parts = lines.split()
+                results[self.objects[i].fixed_parameters["id"]] = (float(parts[2]) if parts[2] == "INDEF" else None,
+                                                                   float(parts[3]) if parts[3] == "INDEF" else None)
                 i += 1
 
         image.processing_parameters["photometry"] = results
+        return image
 
 
 class ShiftTransform(BaseTransform):

@@ -1,4 +1,5 @@
 from data_tier_placeholder.image import Image
+from copy import deepcopy
 
 
 class Transformator:
@@ -20,7 +21,8 @@ class Transformator:
         :param image: Image
         :return: modified image by all given transformators
         """
+        cpimage = deepcopy(image)
         for transformator in self.transformators:
-            image = transformator.transform(image)
-        return image
+            cpimage = transformator.transform(cpimage)
+        return cpimage
 
