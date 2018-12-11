@@ -3,12 +3,17 @@ from data_tier_placeholder.skyobject import SkyObject
 from data_tier_placeholder.image import Image
 import glob
 import pyfits
-import sys
-import os
+
 from astroquery.vizier import Vizier
+from config import Config
 
 import astropy.units as u
 import astropy.coordinates as coord
+
+from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
 
 class InvalidQueryError(Exception):
@@ -168,9 +173,43 @@ class DatabaseHandler(BasicHandler):
 
     @staticmethod
     def save_objects_and_images(image_list: [Image], object_list: [SkyObject]):
-        """Saving to database file using SQL Alchemy"""
-        pass
-    # TODO
+        """Saves everything from object list and image list to database specified in Config.DB_ENGINE"""
+        engine = create_engine(Config.DB_ENGINE)
+        Base = declarative_base(engine)
+        Session = sessionmaker()
+        session = Session(bind=engine)
+
+        # frames
+        for image in image_list:
+            session.add(Frame(id=image.fixed_parameters["id"],
+                              time_jd=image.fixed_parameters["time_jd"],
+                              type=image.fixed_parameters["type"],
+                              exposure=image.fixed_parameters["exposure"],
+                              path=image.fixed_parameters["path"]))
+
+        # objects
+        for skyobject in object_list:
+            session.add(SObject(id=skyobject.fixed_parameters["id"],
+                                ra=skyobject.fixed_parameters["ra"],
+                                dec=skyobject.fixed_parameters["dec"],
+                                catmag=skyobject.fixed_parameters["catalog_magnitude"][0],
+                                catmagerr=skyobject.fixed_parameters["catalog_magnitude"][1]))
+
+        # processing pars
+        for image in image_list:
+            for star_id, magnitude in image.processing_parameters["photometry"].items():
+                session.add(Magnitude(star_id=star_id,
+                                      frame_id=image.fixed_parameters["id"],
+                                      mag=magnitude[0],
+                                      magerr=magnitude[1]))
+            # TODO: formatting of Shifts parameter after calculating (for saving-missing ID-not needed only for tests)
+            k = 0
+            for shift in image.processing_parameters["shifts"]:
+                session.add(Shift(star_id=k,
+                                  frame_id=image.fixed_parameters["id"],
+                                  shift=shift[0],
+                                  shifterr=shift[1]))
+    # TODO: location of base, engine etc.
 
 
 class ObjectHandler:
@@ -225,9 +264,9 @@ class ObjectHandler:
         :param mag_limit: limiting lower magnitude for star selection
         :return: list of objects and the GRB
         """
-        vizier_query = Vizier(columns=['RAJ2000', 'DEJ2000', 'Vmag','e_Vmag'],
+        vizier_query = Vizier(columns=['RAJ2000', 'DEJ2000', 'Vmag', 'e_Vmag'],
                               column_filters={"Vmag": "<"+str(mag_limit)},
-                              row_limit= self.limit)
+                              row_limit=self.limit)
         coordinates = coord.SkyCoord(target.fixed_parameters["ra"],
                                      target.fixed_parameters["dec"],
                                      unit=(u.deg, u.deg),
