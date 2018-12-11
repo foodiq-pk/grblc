@@ -227,18 +227,43 @@ class PyrafPhotometryTransform(BaseTransform):
 
 
 class ShiftTransform(BaseTransform):
+    """
+    Transform to calculate difference in zero magnitude of a frame.
+    Must be initialized with object list that is the same as object list used for photometry on given image to calculate
+    shifts of each of the control stars.
 
+    Writes information about shift and also specific values for each of the stars in the processing parameters under
+    shift and shifts respectively.
+    """
+    # TODO separate GRB to not be included in the shift calculation
     REQUIRES = ["photometry"]
     PROVIDES = ["shift"]
 
-    def __init__(self):
-        pass
-        # TODO
+    def __init__(self, object_list: [SkyObject]):
+        self.object_list = object_list
+
+    def find_star_with_id(self, id):
+        for star in self.object_list:
+            if id == star.fixed_parameters["id"]:
+                return star
+            else:
+                raise ValueError("no star with given id")
 
     def transform(self, image: Image):
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
-        # TODO
+        shifts = []
+
+        for id, value in image.processing_parameters["photometry"].items():
+            cat_mag = self.find_star_with_id(id).fixed_parameters["catalog_magnitude"]
+            shifts.append((cat_mag[0]-value[0],
+                           np.sqrt(cat_mag[1]**2+value[1]**2)))
+
+        image.processing_parameters["shifts"] = shifts
+        image.processing_parameters["shift"] = (np.mean([val[0] for val in shifts]),
+                                                np.sqrt(sum(val[1]**2 for val in shifts)) /
+                                                len([val[1] for val in shifts]))
+        return image
 
 
 class StackTransform(BaseTransform):
