@@ -218,8 +218,8 @@ class PyrafPhotometryTransform(BaseTransform):
             i = 0
             for lines in output_file:
                 parts = lines.split()
-                results[self.objects[i].fixed_parameters["id"]] = (float(parts[2]) if parts[2] == "INDEF" else None,
-                                                                   float(parts[3]) if parts[3] == "INDEF" else None)
+                results[self.objects[i].fixed_parameters["id"]] = (float(parts[2]) if parts[2] != "INDEF" else None,
+                                                                   float(parts[3]) if parts[3] != "INDEF" else None)
                 i += 1
 
         image.processing_parameters["photometry"] = results
@@ -237,7 +237,7 @@ class ShiftTransform(BaseTransform):
     """
     # TODO separate GRB to not be included in the shift calculation
     REQUIRES = ["photometry"]
-    PROVIDES = ["shift"]
+    PROVIDES = ["shifts"]
 
     def __init__(self, object_list: [SkyObject]):
         self.object_list = object_list
@@ -246,23 +246,23 @@ class ShiftTransform(BaseTransform):
         for star in self.object_list:
             if id == star.fixed_parameters["id"]:
                 return star
-            else:
-                raise ValueError("no star with given id")
+
+        raise ValueError("no star with given id")
 
     def transform(self, image: Image):
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
-        shifts = []
-
+        shifts = {}
+        # TODO: crash on trying to shift grb - no cat magnitude/or missing in list
         for id, value in image.processing_parameters["photometry"].items():
             cat_mag = self.find_star_with_id(id).fixed_parameters["catalog_magnitude"]
-            shifts.append((cat_mag[0]-value[0],
-                           np.sqrt(cat_mag[1]**2+value[1]**2)))
+            shifts[id] = (cat_mag[0]-value[0],
+                          np.sqrt(cat_mag[1]**2+value[1]**2))
 
         image.processing_parameters["shifts"] = shifts
-        image.processing_parameters["shift"] = (np.mean([val[0] for val in shifts]),
-                                                np.sqrt(sum(val[1]**2 for val in shifts)) /
-                                                len([val[1] for val in shifts]))
+        #image.processing_parameters["shift"] = (np.mean([val[0] for val in shifts]),
+        #                                       np.sqrt(sum(val[1]**2 for val in shifts)) /
+        #                                        len([val[1] for val in shifts]))
         return image
 
 

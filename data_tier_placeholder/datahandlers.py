@@ -5,15 +5,12 @@ import glob
 import pyfits
 
 from astroquery.vizier import Vizier
-from config import Config
+
 
 import astropy.units as u
 import astropy.coordinates as coord
 
-from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject, init_session, Base
 
 
 class InvalidQueryError(Exception):
@@ -173,11 +170,10 @@ class DatabaseHandler(BasicHandler):
 
     @staticmethod
     def save_objects_and_images(image_list: [Image], object_list: [SkyObject]):
-        """Saves everything from object list and image list to database specified in Config.DB_ENGINE"""
-        engine = create_engine(Config.DB_ENGINE)
-        Base = declarative_base(engine)
-        Session = sessionmaker()
-        session = Session(bind=engine)
+        """Saves everything from object list and image list to database specified in Config.DB_ENGINE.
+        Destination db can be changed through session engine parameter or in config"""
+
+        session = init_session()
 
         # frames
         for image in image_list:
@@ -203,12 +199,14 @@ class DatabaseHandler(BasicHandler):
                                       mag=magnitude[0],
                                       magerr=magnitude[1]))
             # TODO: formatting of Shifts parameter after calculating (for saving-missing ID-not needed only for tests)
-            k = 0
-            for shift in image.processing_parameters["shifts"]:
-                session.add(Shift(star_id=k,
+        for image in image_list:
+            for star_id, shift in image.processing_parameters["shifts"].items():
+                session.add(Shift(star_id=star_id,
                                   frame_id=image.fixed_parameters["id"],
                                   shift=shift[0],
                                   shifterr=shift[1]))
+        Base.metadata.create_all()
+        session.commit()
     # TODO: location of base, engine etc.
 
 
@@ -253,7 +251,7 @@ class ObjectHandler:
         if catalog == "NOMAD":
             return self.vizier_query_object_list_nomad(self.target, radius, mag_limit)
         else:
-            raise ValueError("Unsupported or invalid catalogue name")
+            raise ValueError("Unsupported or invalid catalog name")
 
     def vizier_query_object_list_apass(self, target: SkyObject, radius, mag_limit):
         """
