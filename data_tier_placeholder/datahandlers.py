@@ -11,6 +11,8 @@ import astropy.units as u
 import astropy.coordinates as coord
 
 from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject, init_session, Base
+from sqlalchemy.engine import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 class InvalidQueryError(Exception):
@@ -165,8 +167,54 @@ class DatabaseHandler(BasicHandler):
         super().__init__(query, path)
 
     def get_list(self):
-        pass
-    # TODO
+        engine = create_engine(self.path)
+        Session = sessionmaker()
+        session = Session(bind=engine)
+        image_list = self.load_images(session)
+        object_list = self.load_objects(session)
+        self.load_photometry(session, image_list)
+        self.load_shifts(session, image_list)
+        return image_list, object_list
+
+    def load_images(self, session):
+        image_list = []
+        db_image_list = session.query(Frame).all()
+        for db_image in db_image_list:
+            image_list.append(Image(fixed_parameters={"time_jd": db_image.time_jd,
+                                                      "exposure": db_image.exposure,
+                                                      "id": db_image.id,
+                                                      "type": db_image.type,
+                                                      "path": db_image.path},
+                                    processing_parameters={"dark": True, "flat": True}))
+        return image_list
+
+    def load_objects(self, session):
+
+        object_list = []
+        db_obj_list = session.query(SObject).all()
+        for db_obj in db_obj_list:
+            object_list.append(SkyObject(fixed_parameters={"ra": db_obj.ra,
+                                                           "dec": db_obj.dec,
+                                                           "id": db_obj.id,
+                                                           "type": "star",
+                                                           "catalog_magnitude": (db_obj.catmag, db_obj.catmagerr)}))
+        return object_list
+
+    def load_photometry(self, session, image_list):
+        for image in image_list:
+            star_list = session.query(Magnitude).filter(Magnitude.frame_id == image.fixed_parameters["id"]).all()
+            photometry = {}
+            for star in star_list:
+                photometry[star.star_id] = (star.mag, star.magerr)
+            image.processing_parameters["photometry"] = photometry
+
+    def load_shifts(self, session, image_list):
+        for image in image_list:
+            star_list = session.query(Shift).filter(Shift.frame_id == image.fixed_parameters["id"]).all()
+            shifts = {}
+            for star in star_list:
+                shifts[star.star_id] = (star.shift, star.shifterr)
+            image.processing_parameters["shifts"] = shifts
 
     @staticmethod
     def save_objects_and_images(image_list: [Image], object_list: [SkyObject]):
