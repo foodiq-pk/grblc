@@ -253,6 +253,9 @@ class ShiftTransform(BaseTransform):
 
         return None
 
+    def calculate_shift(self):
+        pass
+
     def transform(self, image: Image):
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
@@ -268,9 +271,7 @@ class ShiftTransform(BaseTransform):
                           np.sqrt(cat_mag[1]**2+value[1]**2))
 
         image.processing_parameters["shifts"] = shifts
-        #image.processing_parameters["shift"] = (np.mean([val[0] for val in shifts.values()]),
-        #                                       np.sqrt(sum(val[1]**2 for val in shifts.values())) /
-        #                                        len([val[1] for val in shifts.values()]))
+        #image.processing_parameters["shift"] = self.calculate_shift()
         return image
 
 
