@@ -27,3 +27,10 @@ class DataStructure(ABC):
         :return: bool, whether input is legal
         """
         return False not in [req in parameters for req in self.REQUIRES]
+
+    def get_type(self):
+        return self.fixed_parameters["type"]
+
+    def get_id(self):
+        return self.fixed_parameters["id"]
+

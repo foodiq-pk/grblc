@@ -23,18 +23,16 @@ class Image(DataStructure):
     def get_path(self):
         return self.fixed_parameters["path"]
 
-    def get_type(self):
-        return self.fixed_parameters["type"]
-
-    def get_id(self):
-        return self.fixed_parameters["id"]
-
     def get_photometry(self):
         return self.processing_parameters["photometry"]
 
     def get_shifts(self):
         return self.processing_parameters["shifts"]
 
+    def get_shift(self):
+        return self.processing_parameters["shift"]
     # TODO Getters for: objects, shifts etc.
+
+
 
 

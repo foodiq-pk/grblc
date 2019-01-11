@@ -225,32 +225,32 @@ class DatabaseHandler(BasicHandler):
 
         # frames
         for image in image_list:
-            session.add(Frame(id=image.fixed_parameters["id"],
-                              time_jd=image.fixed_parameters["time_jd"],
-                              type=image.fixed_parameters["type"],
-                              exposure=image.fixed_parameters["exposure"],
-                              path=image.fixed_parameters["path"]))
+            session.add(Frame(id=image.get_id(),
+                              time_jd=image.get_time_jd(),
+                              type=image.get_type(),
+                              exposure=image.get_exposure(),
+                              path=image.get_path()))
 
         # objects
         for skyobject in object_list:
-            session.add(SObject(id=skyobject.fixed_parameters["id"],
-                                ra=skyobject.fixed_parameters["ra"],
-                                dec=skyobject.fixed_parameters["dec"],
-                                catmag=skyobject.fixed_parameters["catalog_magnitude"][0],
-                                catmagerr=skyobject.fixed_parameters["catalog_magnitude"][1]))
+            session.add(SObject(id=skyobject.get_id(),
+                                ra=skyobject.get_ra(),
+                                dec=skyobject.get_dec(),
+                                catmag=skyobject.get_catalog_magnitude()[0],
+                                catmagerr=skyobject.get_catalog_magnitude()[1]))
 
         # processing pars
         for image in image_list:
-            for star_id, magnitude in image.processing_parameters["photometry"].items():
+            for star_id, magnitude in image.get_photometry().items():
                 session.add(Magnitude(star_id=star_id,
-                                      frame_id=image.fixed_parameters["id"],
+                                      frame_id=image.get_id(),
                                       mag=magnitude[0],
                                       magerr=magnitude[1]))
             # TODO: formatting of Shifts parameter after calculating (for saving-missing ID-not needed only for tests)
         for image in image_list:
-            for star_id, shift in image.processing_parameters["shifts"].items():
+            for star_id, shift in image.get_shifts().items():
                 session.add(Shift(star_id=star_id,
-                                  frame_id=image.fixed_parameters["id"],
+                                  frame_id=image.get_id(),
                                   shift=shift[0],
                                   shifterr=shift[1]))
         Base.metadata.create_all()
