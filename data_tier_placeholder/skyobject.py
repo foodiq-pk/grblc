@@ -34,7 +34,7 @@ class SkyObject(DataStructure):
             magerr = img.get_photometry()[self.get_id()][1]
             if mag is not None:
                 times.append(img.get_time_jd())
-                time_errs.append(img.get_exposure()/84600)
+                time_errs.append(img.get_exposure()/84600/2)
                 values.append(mag)
                 value_errs.append(magerr)
         return times, time_errs, values, value_errs
@@ -50,7 +50,7 @@ class SkyObject(DataStructure):
             magerr = img.get_photometry()[self.get_id()][1]
             if mag is not None:
                 times.append(img.get_time_jd())
-                time_errs.append(img.get_exposure()/84600)
+                time_errs.append(img.get_exposure()/84600/2)
                 values.append(mag - img.get_shift()[0])
                 value_errs.append( np.sqrt(magerr**2 + img.get_shift()[1]**2))
         return times, time_errs, values, value_errs
