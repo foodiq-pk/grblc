@@ -164,7 +164,7 @@ class DatabaseHandler(BasicHandler):
     Allows loading and saving images and object data from database file.
     """
     def __init__(self, path: str, query: str=None):
-        super().__init__(query, path)
+        super().__init__(path, query)
 
     def get_list(self):
         engine = create_engine(self.path)
