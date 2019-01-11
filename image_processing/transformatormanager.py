@@ -1,5 +1,6 @@
-from data_tier_placeholder.image import Image
 from copy import deepcopy
+
+from data_tier_placeholder.image import Image
 
 
 class Transformator:

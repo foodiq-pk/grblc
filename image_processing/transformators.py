@@ -260,10 +260,8 @@ class ShiftTransform(BaseTransform):
         if not self.requirements_check(image):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         shifts = {}
-        # TODO: crash on trying to shift grb - no cat magnitude/or missing in list
         for id, value in image.get_photometry().items():
             star = self.find_star_with_id(id)
-            print(star, id)
             if star is None:
                 continue
             cat_mag = star.get_catalog_magnitude()

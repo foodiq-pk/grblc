@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Float
 from sqlalchemy import create_engine
-from config import Config
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
+from config import Config
 
 engine = create_engine(Config.DB_ENGINE)
 Base = declarative_base(engine)

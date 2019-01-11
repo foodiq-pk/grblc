@@ -1,18 +1,16 @@
-from abc import ABC
-from data_tier_placeholder.skyobject import SkyObject
-from data_tier_placeholder.image import Image
 import glob
-import pyfits
+from abc import ABC
 
-from astroquery.vizier import Vizier
-
-
-import astropy.units as u
 import astropy.coordinates as coord
-
-from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject, init_session, Base
+import astropy.units as u
+import pyfits
+from astroquery.vizier import Vizier
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker
+
+from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject, init_session, Base
+from data_tier_placeholder.image import Image
+from data_tier_placeholder.skyobject import SkyObject
 
 
 class InvalidQueryError(Exception):

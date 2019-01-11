@@ -1,6 +1,7 @@
-from data_tier_placeholder.datastructureabc import DataStructure
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+
+from data_tier_placeholder.datastructureabc import DataStructure
 
 
 class SkyObject(DataStructure):
