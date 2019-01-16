@@ -183,7 +183,9 @@ class DatabaseHandler(BasicHandler):
                                                       "id": db_image.id,
                                                       "type": db_image.type,
                                                       "path": db_image.path},
-                                    processing_parameters={"dark": True, "flat": True}))
+                                    processing_parameters={"dark": True,
+                                                           "flat": True,
+                                                           "shift": (db_image.shift, db_image.shifterr)}))
         return image_list
 
     def load_objects(self, session):
@@ -227,7 +229,9 @@ class DatabaseHandler(BasicHandler):
                               time_jd=image.get_time_jd(),
                               type=image.get_type(),
                               exposure=image.get_exposure(),
-                              path=image.get_path()))
+                              path=image.get_path(),
+                              shift=image.get_shift()[0],
+                              shifterr=image.get_shift()[1]))
 
         # objects
         for skyobject in object_list:

@@ -23,6 +23,8 @@ class Frame(Base):
     exposure = Column(Float)
     type = Column(String(10))
     path = Column(String)
+    shift = Column(Float)
+    shifterr = Column(Float)
 
 
 class SObject(Base):
