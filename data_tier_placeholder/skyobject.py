@@ -51,11 +51,11 @@ class SkyObject(DataStructure):
             if mag is not None:
                 times.append(img.get_time_jd())
                 time_errs.append(img.get_exposure()/84600/2)
-                values.append(mag - img.get_shift()[0])
+                values.append(mag + img.get_shift()[0])
                 value_errs.append( np.sqrt(magerr**2 + img.get_shift()[1]**2))
         return times, time_errs, values, value_errs
 
-    def plot_light_curve(self, image_list, type="raw",timeerr = False, magerr = False):
+    def plot_light_curve(self, image_list, type="raw", timeerr=False, magerr=False):
         if type is "raw":
             time, time_errs, mag, mag_errs = self.get_raw_light_curve(image_list)
         elif type is "shifted":
@@ -67,7 +67,7 @@ class SkyObject(DataStructure):
             time_errs = None
         if magerr is False:
             mag_errs = None
-        plt.errorbar(time,mag,yerr=mag_errs,xerr=time_errs,fmt=".")
+        plt.errorbar(time, mag, yerr=mag_errs, xerr=time_errs, fmt=".")
         plt.xlabel("Time - JD[days]")
         plt.ylabel("Magnitude [mag]")
         plt.grid()

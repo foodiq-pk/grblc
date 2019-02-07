@@ -256,12 +256,14 @@ class ShiftTransform(BaseTransform):
     @staticmethod
     def calculate_shift(image):
         vals = image.get_shifts().values()
-        mean = []
-        err = []
-        for val in vals:
-            mean.append(val[0])
-            err.append(val[1] ** 2)
-        return np.mean(mean), np.sqrt(sum(err))
+        return ShiftTransform.weighted_mean(vals)
+
+    @staticmethod
+    def weighted_mean(pairs):
+        sig_pow = 2
+        sigma2 = 1 / (np.sum([1 / s[1] ** sig_pow for s in pairs]))
+        mean = np.sum([s[0] / s[1] ** sig_pow for s in pairs]) * sigma2
+        return mean, np.sqrt(sigma2)
 
     def transform(self, image: Image):
         if not self.requirements_check(image):
