@@ -138,7 +138,7 @@ class DarkTransform(BaseTransform):
         image.processing_parameters["dark"] = True
         return image
 
-
+@DeprecationWarning
 class PyrafPhotometryTransform(BaseTransform):
     """
     Transform that does daophot tast from IRAF on image with objects specified in inicialization.
@@ -229,7 +229,7 @@ class PyrafPhotometryTransform(BaseTransform):
 
 class PythonPhotPhotometryTransform(BaseTransform):
     """
-    PythonPhot procedure
+    PythonPhot photometry procedure
 
     Must be initialized with object list of Object type.
     Writes result in processed parameteres as photometry entry.
@@ -266,16 +266,18 @@ class PythonPhotPhotometryTransform(BaseTransform):
         mag, magerr, flux, fluxerr, sky, skyerr, badflag, outstr = \
             aper.aper(img, xpos, ypos, phpadu=1, apr=Config.APERTURE, zeropoint=24.4,
                       skyrad=[40, 50], badpix=[-12000, 1060000],
-                      exact=True)  # TODO: parameters? Possible crash at no signal
+                      exact=True)  # TODO: parameters? Possible crash at low or no signal
         results = {}
         i = 0
         for o in self.objects:
 
-            results[o.get_id()] = (mag[i] if mag[i] is not "nan" else None,
-                                   magerr[i] if magerr[i] is not "nan" else None)
+            results[o.get_id()] = (float(mag[i]) if mag[i] is not "nan" else None,
+                                   float(magerr[i]) if magerr[i] is not "nan" else None)
             i += 1
 
         image.processing_parameters["photometry"] = results
+        image.processing_parameters["src_flux"] = (flux[0], fluxerr[0])
+        image.processing_parameters["sky"] = (sky[0], skyerr[0])
         return image
 
 
