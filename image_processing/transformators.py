@@ -10,6 +10,7 @@ from stsci.tools import capable
 from config import Config
 from data_tier_placeholder.image import Image
 from data_tier_placeholder.skyobject import SkyObject
+from external.PythonPhot import aper
 
 
 class BaseTransform(ABC):
@@ -153,7 +154,7 @@ class PyrafPhotometryTransform(BaseTransform):
     def __init__(self, object_list: [SkyObject]):
         self.objects = object_list
 
-    def get_coordinates_file(self, image: Image):
+    def _get_coordinates_file(self, image: Image):
         """ Creates coordinates file for photometry using wcs coordinates in FITS header.
 
         :return: filename
@@ -195,7 +196,7 @@ class PyrafPhotometryTransform(BaseTransform):
         photpars = iraf.photpars.getParList()
         iraf.photpars.setParam('apertures', Config.APERTURE)
         iraf.phot.setParam('image', image.fixed_parameters["path"])
-        iraf.phot.setParam('coords', self.get_coordinates_file(image))
+        iraf.phot.setParam('coords', self._get_coordinates_file(image))
         iraf.phot.setParam('verify', 'no')
         iraf.phot.setParam('output', dao_phot_out)
         iraf.phot.setParam('interactive', 'no')
@@ -221,6 +222,58 @@ class PyrafPhotometryTransform(BaseTransform):
                 results[self.objects[i].fixed_parameters["id"]] = (float(parts[2]) if parts[2] != "INDEF" else None,
                                                                    float(parts[3]) if parts[3] != "INDEF" else None)
                 i += 1
+
+        image.processing_parameters["photometry"] = results
+        return image
+
+
+class PythonPhotPhotometryTransform(BaseTransform):
+    """
+    PythonPhot procedure
+
+    Must be initialized with object list of Object type.
+    Writes result in processed parameteres as photometry entry.
+    ** TODO:
+        - Writing results to objects
+    """
+    REQUIRES = ["dark", "flat"]
+    PROVIDES = ["photometry"]
+
+    def __init__(self, object_list: [SkyObject]):
+        self.objects = object_list
+
+    def _get_coordinates_arrays(self, image: Image):
+        """ Creates coordinates arrays for photometry using wcs coordinates in FITS header.
+
+        :return: filename
+        """
+        header = fits.getheader(image.get_path())
+        w = WCS(header)
+        pixel_coordinates_ra = []
+        pixel_coordinates_dec = []
+
+        for o in self.objects:
+            x, y = w.wcs_world2pix(o.fixed_parameters['ra'],
+                                   o.fixed_parameters['dec'], 1)
+
+            pixel_coordinates_ra.append(float(x))
+            pixel_coordinates_dec.append(float(y))
+        return np.array(pixel_coordinates_ra), np.array(pixel_coordinates_dec)
+
+    def transform(self, image: Image):
+        img = fits.getdata(image.get_path())
+        xpos, ypos = self._get_coordinates_arrays(image)
+        mag, magerr, flux, fluxerr, sky, skyerr, badflag, outstr = \
+            aper.aper(img, xpos, ypos, phpadu=1, apr=Config.APERTURE, zeropoint=24.4,
+                      skyrad=[40, 50], badpix=[-12000, 1060000],
+                      exact=True)  # TODO: parameters? Possible crash at no signal
+        results = {}
+        i = 0
+        for o in self.objects:
+
+            results[o.get_id()] = (mag[i] if mag[i] is not "nan" else None,
+                                   magerr[i] if magerr[i] is not "nan" else None)
+            i += 1
 
         image.processing_parameters["photometry"] = results
         return image
