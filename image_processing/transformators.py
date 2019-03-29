@@ -337,22 +337,6 @@ class ShiftTransform(BaseTransform):
         return image
 
 
-class StackTransform(BaseTransform):
-
-    REQUIRES = ["dark", "flat"]
-    PROVIDES = ["stack"]
-
-    def __init__(self):
-        pass
-    # TODO
-
-    def transform(self, image: Image):
-        if not self.requirements_check(image):
-            raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
-        pass
-        # TODO
-
-
 class CalibrateTransform(BaseTransform):
 
     REQUIRES = ["shift"]

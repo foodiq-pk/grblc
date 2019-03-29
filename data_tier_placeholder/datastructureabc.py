@@ -26,7 +26,7 @@ class DataStructure(ABC):
         :param parameters: parameter dictionary
         :return: bool, whether input is legal
         """
-        return False not in [req in parameters for req in self.REQUIRES]
+        return all([req in parameters for req in self.REQUIRES])
 
     def get_type(self):
         return self.fixed_parameters["type"]

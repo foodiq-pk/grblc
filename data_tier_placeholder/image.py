@@ -31,8 +31,15 @@ class Image(DataStructure):
 
     def get_shift(self):
         return self.processing_parameters["shift"]
-    # TODO Getters for: objects, shifts etc.
 
+    def get_src_flux(self):
+        return self.processing_parameters["src_flux"]
+
+    def get_sky(self):
+        return self.processing_parameters["sky"]
+
+    def get_stack(self):
+        return self.processing_parameters["stack"]
 
 
 

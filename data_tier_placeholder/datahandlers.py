@@ -153,6 +153,7 @@ class FileHandler(BasicHandler):
             image_list = Image(fixed_parameters=fixed_pars,
                                processing_parameters=processing_pars)
             # TODO Decide whether to return list or single object if only one image matches query
+        image_list.sort(key=lambda x: x.get_time_jd())
         return image_list
 
 
@@ -166,15 +167,16 @@ class DatabaseHandler(BasicHandler):
 
     def get_list(self):
         engine = create_engine(self.path)
-        Session = sessionmaker()
-        session = Session(bind=engine)
-        image_list = self.load_images(session)
-        object_list = self.load_objects(session)
-        self.load_photometry(session, image_list)
-        self.load_shifts(session, image_list)
+        _session = sessionmaker()
+        session = _session(bind=engine)
+        image_list = self._load_images(session)
+        object_list = self._load_objects(session)
+        self._load_photometry(session, image_list)
+        self._load_shifts(session, image_list)
         return image_list, object_list
 
-    def load_images(self, session):
+    @staticmethod
+    def _load_images(session):
         image_list = []
         db_image_list = session.query(Frame).all()
         for db_image in db_image_list:
@@ -188,7 +190,8 @@ class DatabaseHandler(BasicHandler):
                                                            "shift": (db_image.shift, db_image.shifterr)}))
         return image_list
 
-    def load_objects(self, session):
+    @staticmethod
+    def _load_objects(session):
 
         object_list = []
         db_obj_list = session.query(SObject).all()
@@ -200,7 +203,8 @@ class DatabaseHandler(BasicHandler):
                                                            "catalog_magnitude": (db_obj.catmag, db_obj.catmagerr)}))
         return object_list
 
-    def load_photometry(self, session, image_list):
+    @staticmethod
+    def _load_photometry(session, image_list):
         for image in image_list:
             star_list = session.query(Magnitude).filter(Magnitude.frame_id == image.fixed_parameters["id"]).all()
             photometry = {}
@@ -208,7 +212,8 @@ class DatabaseHandler(BasicHandler):
                 photometry[star.star_id] = (star.mag, star.magerr)
             image.processing_parameters["photometry"] = photometry
 
-    def load_shifts(self, session, image_list):
+    @staticmethod
+    def _load_shifts(session, image_list):
         for image in image_list:
             star_list = session.query(Shift).filter(Shift.frame_id == image.fixed_parameters["id"]).all()
             shifts = {}
