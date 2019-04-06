@@ -1,9 +1,12 @@
 import glob
 from abc import ABC
+from pathlib import Path
+from tkinter import Tk
+from tkinter.filedialog import askopenfilenames
 
 import astropy.coordinates as coord
 import astropy.units as u
-import pyfits
+from astropy.io import fits as pyfits
 from astroquery.vizier import Vizier
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -11,6 +14,8 @@ from sqlalchemy.orm import sessionmaker
 from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject, init_session, Base
 from data_tier_placeholder.image import Image
 from data_tier_placeholder.skyobject import SkyObject
+
+# TODO: check for possible crashes because of this change (fits to pyfits)
 
 
 class InvalidQueryError(Exception):
@@ -92,18 +97,18 @@ class FileHandler(BasicHandler):
             "flat"
             "flat.fits flat"
     """
-
+# TODO: redo using pathlib
     def __init__(self, path: str, query: str):
         super().__init__(path, query)
         squery = query.split(" ")
         if len(squery) == 2:  # Query + data type
             self.query = squery[0]
-            if True in [data_type in squery[1] for data_type in ["flat", "dark", "data", "ddata", "cdata", "dfdata"]]:
+            if any([data_type in squery[1] for data_type in ["flat", "dark", "data", "ddata", "cdata", "dfdata"]]):
                 self.type = squery[1]
             else:  # data type is not in legal ones
                 raise InvalidQueryError("invalid data type")
         else:  # Selecting single file, only data type necessary
-            if True in [data_type in squery[0] for data_type in ["flat", "dark", "data", "ddata", "cdata", "dfdata"]]:
+            if any([data_type in squery[0] for data_type in ["flat", "dark", "data", "ddata", "cdata", "dfdata"]]):
                 self.query = ""
                 self.type = squery[0]
             else:
@@ -157,11 +162,58 @@ class FileHandler(BasicHandler):
         return image_list
 
 
+class FileHandlerDialog:
+    """DIalog version of file handler for interactive usage"""
+    def __init__(self, type_string):
+        if type_string in ["flat", "dark", "data", "ddata", "cdata", "dfdata"]:
+            self.type = type_string
+        else:
+            raise Exception("Invalid FITS file type")
+
+        self.pathlist = self._gen_path_list_from_dialog()
+
+    def _gen_path_list_from_dialog(self):
+        Tk().withdraw()
+        files = askopenfilenames(title="choose {0} type FITS files".format(self.type),
+                                 initialdir="/home",
+                                 filetypes=[("FITS files", "*.fits")],
+                                 )
+        paths = []
+        for file in files:
+            paths.append(Path(file))
+
+        return paths
+
+    def get_list(self):
+        if self.type in ["ddata", "cdata", "dfdata"]:
+            processing_parameters = {"flat": True, "dark": True}
+        else:
+            processing_parameters = {}
+        image_list = []
+        for path in self.pathlist:
+            image = pyfits.open(path)
+            exposure = image[0].header["EXPOSURE"]
+            time_jd = image[0].header["JD"]
+            fixed_pars = {
+                "time_jd": time_jd,
+                "path": path,
+                "type": self.type,
+                "exposure": exposure,
+                "id": path.stem}
+
+            image_list.append(Image(fixed_parameters=fixed_pars,
+                                    processing_parameters=processing_parameters))
+
+        image_list.sort(key=lambda x: x.get_time_jd())
+        return image_list
+
+
 class DatabaseHandler(BasicHandler):
     """
     Handler for interacting with database (sqlite3)
     Allows loading and saving images and object data from database file.
     """
+# TODO: redo using pathlib
     def __init__(self, path: str, query: str=None):
         super().__init__(path, query)
 
