@@ -10,7 +10,7 @@ class DataStructure(ABC):
     def __init__(self, fixed_parameters: dict, processing_parameters: dict = {}):
         """
         constructor for both data structures
-        :param fixed_parameters: Unchanged parameters
+        :param fixed_parameters: permanent characteristics
         :param processing_parameters: Parameters calculated from images with transformators
         """
 

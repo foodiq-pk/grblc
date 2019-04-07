@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject, init_session, Base
 from data_tier_placeholder.image import Image
 from data_tier_placeholder.skyobject import SkyObject
+from config import Config
 
 # TODO: check for possible crashes because of this change (fits to pyfits)
 
@@ -52,8 +53,9 @@ class BasicHandler(ABC):
         """returns list of objects based on selected handler and query"""
         raise NotImplementedError
 
-
+@DeprecationWarning
 class FileHandler(BasicHandler):
+    # TODO: redo all
     """
     Handler for file and folder type queries.
     Only allows generation of lists of images and single image objects
@@ -115,12 +117,13 @@ class FileHandler(BasicHandler):
                 raise InvalidQueryError("invalid data type")
 
     def get_list(self):
+        # TODO: Redo
         gstring = self.path + self.query
         # decide data type and corrections
-        if self.type == "flat" or self.type == "dark" or self.type == "data":
+        if self.type in ["flat", "dark", "data"]:
             data_type = self.type
             processing_pars = {}
-        elif self.type == "cdata" or self.type == "dfdata":
+        elif self.type in ["cdata", "dfdata"]:
             data_type = "data"
             processing_pars = {"flat": True, "dark": True}
         else:
@@ -136,7 +139,7 @@ class FileHandler(BasicHandler):
                 time_jd = image[0].header["JD"]
                 fixed_pars = {
                     "time_jd": time_jd,
-                    "path": path,
+                    "path": Path(path),
                     "type": data_type,
                     "exposure": exposure,
                     "id": k}
@@ -175,7 +178,7 @@ class FileHandlerDialog:
     def _gen_path_list_from_dialog(self):
         Tk().withdraw()
         files = askopenfilenames(title="choose {0} type FITS files".format(self.type),
-                                 initialdir="/home",
+                                 initialdir=Config.DATA_DIR,
                                  filetypes=[("FITS files", "*.fits")],
                                  )
         paths = []
@@ -236,7 +239,7 @@ class DatabaseHandler(BasicHandler):
                                                       "exposure": db_image.exposure,
                                                       "id": db_image.id,
                                                       "type": db_image.type,
-                                                      "path": db_image.path},
+                                                      "path": Path(db_image.path)},
                                     processing_parameters={"dark": True,
                                                            "flat": True,
                                                            "shift": (db_image.shift, db_image.shifterr)}))
@@ -286,13 +289,13 @@ class DatabaseHandler(BasicHandler):
                               time_jd=image.get_time_jd(),
                               type=image.get_type(),
                               exposure=image.get_exposure(),
-                              path=image.get_path(),
+                              path=str(image.get_path()),
                               shift=image.get_shift()[0],
                               shifterr=image.get_shift()[1]))
 
         # objects
         for skyobject in object_list:
-            session.add(SObject(id=skyobject.get_id(),
+            session.add(SObject(id=str(skyobject.get_id()),
                                 ra=skyobject.get_ra(),
                                 dec=skyobject.get_dec(),
                                 catmag=skyobject.get_catalog_magnitude()[0],
@@ -301,14 +304,14 @@ class DatabaseHandler(BasicHandler):
         # processing pars
         for image in image_list:
             for star_id, magnitude in image.get_photometry().items():
-                session.add(Magnitude(star_id=star_id,
+                session.add(Magnitude(star_id=str(star_id),
                                       frame_id=image.get_id(),
                                       mag=magnitude[0],
                                       magerr=magnitude[1]))
             # TODO: formatting of Shifts parameter after calculating (for saving-missing ID-not needed only for tests)
         for image in image_list:
             for star_id, shift in image.get_shifts().items():
-                session.add(Shift(star_id=star_id,
+                session.add(Shift(star_id=str(star_id),
                                   frame_id=image.get_id(),
                                   shift=shift[0],
                                   shifterr=shift[1]))
@@ -369,7 +372,7 @@ class ObjectHandler:
         :param mag_limit: limiting lower magnitude for star selection
         :return: list of objects and the GRB
         """
-        vizier_query = Vizier(columns=['RAJ2000', 'DEJ2000', 'Vmag', 'e_Vmag'],
+        vizier_query = Vizier(columns=['recno', 'RAJ2000', 'DEJ2000', 'Vmag', 'e_Vmag'],
                               column_filters={"Vmag": "<"+str(mag_limit)},
                               row_limit=self.limit)
         coordinates = coord.SkyCoord(target.fixed_parameters["ra"],
@@ -386,7 +389,7 @@ class ObjectHandler:
             object_list.append(SkyObject({"ra": o['RAJ2000'],
                                           "dec": o['DEJ2000'],
                                           "catalog_magnitude": (o['Vmag'], o['e_Vmag']),
-                                          "id": i,
+                                          "id": o["recno"],
                                           "type": "star"}))
             i += 1
 

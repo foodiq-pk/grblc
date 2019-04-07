@@ -2,8 +2,7 @@ import os
 from abc import ABC
 
 import numpy as np
-import pyfits
-from astropy.io import fits
+from astropy.io import fits as pyfits
 from astropy.wcs import WCS
 from stsci.tools import capable
 
@@ -80,10 +79,16 @@ class FlatTransform(BaseTransform):
         img = pyfits.open(image.fixed_parameters["path"])
         values = img[0].data/self.flat
         header = img[0].header
+
+        # path and filename
         old_path = image.fixed_parameters["path"]
-        image.fixed_parameters["path"] = old_path[:-5] + "f.fits"
+        new_path = old_path.parent
+        new_file_name = old_path.stem + "df.fits"
+        new_path = new_path / new_file_name
+        image.fixed_parameters["path"] = new_path
+
+        # writing fits and creating image object
         pyfits.writeto(image.fixed_parameters["path"], values, header)
-        # os.remove(old_path) TODO: delete old?
         image.processing_parameters["flat"] = True
         return image
 
@@ -132,11 +137,22 @@ class DarkTransform(BaseTransform):
         img = pyfits.open(image.fixed_parameters["path"])
         values = img[0].data - self.dark
         header = img[0].header
+
+        # path and filename
         old_path = image.fixed_parameters["path"]
-        image.fixed_parameters["path"] = old_path[:-5] + "d.fits"
+        new_path = old_path.parent
+        new_file_name = old_path.stem + "d.fits"
+        new_path = new_path / new_file_name
+        image.fixed_parameters["path"] = new_path
+        # overrwriting old one
+        if os.path.exists(new_path) and Config.OVERWRITE:
+            os.remove(new_path)
+
+        # writing image to fits and creating image object
         pyfits.writeto(image.fixed_parameters["path"], values, header)
         image.processing_parameters["dark"] = True
         return image
+
 
 @DeprecationWarning
 class PyrafPhotometryTransform(BaseTransform):
@@ -160,7 +176,7 @@ class PyrafPhotometryTransform(BaseTransform):
         :return: filename
         """
         filename = Config.FILE_DUMP + "xy_coords_file.txt"
-        header = fits.getheader(image.get_path())
+        header = pyfits.getheader(image.get_path())
         w = WCS(header)
         pixel_coordinates = []
 
@@ -247,7 +263,7 @@ class PythonPhotPhotometryTransform(BaseTransform):
 
         :return: filename
         """
-        header = fits.getheader(image.get_path())
+        header = pyfits.getheader(image.get_path())
         w = WCS(header)
         pixel_coordinates_ra = []
         pixel_coordinates_dec = []
@@ -261,7 +277,7 @@ class PythonPhotPhotometryTransform(BaseTransform):
         return np.array(pixel_coordinates_ra), np.array(pixel_coordinates_dec)
 
     def transform(self, image: Image):
-        img = fits.getdata(image.get_path())
+        img = pyfits.getdata(image.get_path())
         xpos, ypos = self._get_coordinates_arrays(image)
         mag, magerr, flux, fluxerr, sky, skyerr, badflag, outstr = \
             aper.aper(img, xpos, ypos, phpadu=1, apr=Config.APERTURE, zeropoint=24.4,

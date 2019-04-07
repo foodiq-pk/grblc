@@ -4,6 +4,8 @@ class Config:
     FLAT_PATH = '/tmp/temp_master_flat.fits'
     FILE_DUMP = '/tmp/'   # Necessary for Pyraf photometry
     DB_ENGINE = "sqlite:////tmp/test.db"
+    OVERWRITE = True
+    DATA_DIR = "/home/foodiq/data/grbs/"
 
     # logging level
 
@@ -26,3 +28,4 @@ class Config:
     @staticmethod
     def set_db(path: str):
         Config.DB_ENGINE = path
+

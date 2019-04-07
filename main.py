@@ -19,3 +19,7 @@ def plot_sky(image_list: [Image]):
         time.append(img.get_time_jd())
         sky.append(img.get_sky()[0])
     plt.plot(time, sky, ".")
+
+
+# TODO: write simple main that doest
+    #  all stuff from beggining to end with some pre-configuration of folders, database and shit

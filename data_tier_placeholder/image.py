@@ -41,5 +41,3 @@ class Image(DataStructure):
     def get_stack(self):
         return self.processing_parameters["stack"]
 
-
-
