@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 from data_tier_placeholder.image import Image
-
+# TODO: class gets list and applies it to all images, returns modified list
 
 class Transformator:
     """
