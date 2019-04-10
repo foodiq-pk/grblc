@@ -1,5 +1,7 @@
 import os
 from abc import ABC
+from pathlib import Path
+from datetime import datetime
 
 import numpy as np
 from astropy.io import fits as pyfits
@@ -58,6 +60,8 @@ class FlatTransform(BaseTransform):
         :param save_path: Optional save path
         :return: master flat as Image type object
         """
+        flat_filename = "master_flat" + datetime.now().strftime("_%H-%M-%Y-%d-%m") + ".fits"
+        save_path = Path(save_path) / flat_filename
         counter = 0
         values = []
         for image in images:
@@ -66,8 +70,8 @@ class FlatTransform(BaseTransform):
         flat_data = np.median(values, axis=0)
         flat_data = flat_data / np.mean(flat_data)
         hdu = pyfits.PrimaryHDU(flat_data)
-        if os.path.exists(Config.FLAT_PATH):
-            os.remove(Config.FLAT_PATH)
+        if os.path.exists(save_path) and Config.OVERWRITE:
+            os.remove(save_path)
         hdu.writeto(save_path)
         return Image({"time_jd": 0, "exposure": 0, "type": "flat", "path": save_path, "id": "mflat"}, {})
 
@@ -88,6 +92,8 @@ class FlatTransform(BaseTransform):
         image.fixed_parameters["path"] = new_path
 
         # writing fits and creating image object
+        if os.path.exists(new_path) and Config.OVERWRITE:
+            os.remove(new_path)
         pyfits.writeto(image.fixed_parameters["path"], values, header)
         image.processing_parameters["flat"] = True
         return image
@@ -116,6 +122,8 @@ class DarkTransform(BaseTransform):
         :param save_path: Optional save path
         :return: master flat as Image type object
         """
+        dark_filename = "master_dark" + datetime.now().strftime("_%H-%M-%Y-%d-%m") + ".fits"
+        save_path = Path(save_path) / dark_filename
         counter = 0
         values = []
         for image in images:
@@ -123,8 +131,8 @@ class DarkTransform(BaseTransform):
             counter += 1
         dark_data = np.median(values, axis=0)
         hdu = pyfits.PrimaryHDU(dark_data)
-        if os.path.exists(Config.DARK_PATH):
-            os.remove(Config.DARK_PATH)
+        if os.path.exists(save_path) and Config.OVERWRITE:
+            os.remove(save_path)
         hdu.writeto(save_path)
         return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path, "id": "mdark"}, {})
 
