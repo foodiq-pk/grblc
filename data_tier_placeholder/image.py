@@ -1,4 +1,6 @@
 from data_tier_placeholder.datastructureabc import DataStructure
+from astropy.io import fits
+from astropy.wcs import WCS
 
 
 class Image(DataStructure):
@@ -41,3 +43,27 @@ class Image(DataStructure):
     def get_stack(self):
         return self.processing_parameters["stack"]
 
+    def check_if_object_are_in_image(self, object_list):
+        """
+        Checks whether objects in passed objects list are within image borders or not.
+
+        :return: tuple, list of objects in image and list of objects not in image
+        """
+        header = fits.getheader(self.get_path())
+        data = fits.getdata(self.get_path())
+        shape = data.shape
+        x_lim = shape[1]
+        y_lim = shape[0]
+        print(shape)
+        w = WCS(header)
+        in_image = []
+        not_in_image = []
+
+        for o in object_list:
+            x, y = w.wcs_world2pix(o.fixed_parameters['ra'],
+                                   o.fixed_parameters['dec'], 1)
+            if x < x_lim and y < y_lim:
+                in_image.append(o)
+            else:
+                not_in_image.append(o)
+        return in_image, not_in_image
