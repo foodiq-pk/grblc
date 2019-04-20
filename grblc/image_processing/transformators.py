@@ -1,17 +1,43 @@
 import os
 from abc import ABC
-from pathlib import Path
+from copy import deepcopy
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
-from astropy.io import fits as pyfits
+from astropy.io import fits
 from astropy.wcs import WCS
 from stsci.tools import capable
 
-from config import Config
-from data_tier_placeholder.image import Image
-from data_tier_placeholder.skyobject import SkyObject
+from config import CONFIG
 from external.PythonPhot import aper
+from grblc.data_processing.datastructures import Image, SkyObject
+
+
+class Transformator:
+    """
+    Class to combine all transforms to be applied on an image.
+    """
+
+    def __init__(self, transformators):
+        """
+        Tranformators to be applied on image.
+        Must be initialized in order of application.
+        :param transformators: list of transformators
+        """
+        self.transformators = transformators
+
+    def apply(self, image: Image):
+        """
+        applies all initialized transformators on given image
+        :param image: Image
+        :return: modified image by all given transformators
+        """
+        cpimage = deepcopy(image)
+        for transformator in self.transformators:
+            cpimage = transformator.transform(cpimage)
+        return cpimage
+# TODO: class gets list and applies it to all images, returns modified list
 
 
 class BaseTransform(ABC):
@@ -48,11 +74,11 @@ class FlatTransform(BaseTransform):
     PROVIDES = ["flat"]
 
     def __init__(self, master_flat: Image):
-        image = pyfits.open(master_flat.fixed_parameters["path"])
+        image = fits.open(master_flat.fixed_parameters["path"])
         self.flat = image[0].data
 
     @staticmethod
-    def create_master_flat(images: [Image], save_path: str =Config.FLAT_PATH):
+    def create_master_flat(images: [Image], save_path: str =CONFIG["FLAT_PATH"]):
         """
         Static method to create master flat from given flat images. Save path specified in Config.FLAT_PATH
         Overwrites flat image in Config.FLAT_PATH !
@@ -65,12 +91,12 @@ class FlatTransform(BaseTransform):
         counter = 0
         values = []
         for image in images:
-            values.append(pyfits.open(image.fixed_parameters["path"])[0].data)
+            values.append(fits.open(image.fixed_parameters["path"])[0].data)
             counter += 1
         flat_data = np.median(values, axis=0)
         flat_data = flat_data / np.mean(flat_data)
-        hdu = pyfits.PrimaryHDU(flat_data)
-        if os.path.exists(save_path) and Config.OVERWRITE:
+        hdu = fits.PrimaryHDU(flat_data)
+        if os.path.exists(save_path) and CONFIG["OVERWRITE"]:
             os.remove(save_path)
         hdu.writeto(save_path)
         return Image({"time_jd": 0, "exposure": 0, "type": "flat", "path": save_path, "id": "mflat"}, {})
@@ -80,7 +106,7 @@ class FlatTransform(BaseTransform):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         if "flat" in image.processing_parameters:
             raise AttributeError("flat correction already applied")
-        img = pyfits.open(image.fixed_parameters["path"])
+        img = fits.open(image.fixed_parameters["path"])
         values = img[0].data/self.flat
         header = img[0].header
 
@@ -92,9 +118,9 @@ class FlatTransform(BaseTransform):
         image.fixed_parameters["path"] = new_path
 
         # writing fits and creating image object
-        if os.path.exists(new_path) and Config.OVERWRITE:
+        if os.path.exists(new_path) and CONFIG["OVERWRITE"]:
             os.remove(new_path)
-        pyfits.writeto(image.fixed_parameters["path"], values, header)
+        fits.writeto(image.fixed_parameters["path"], values, header)
         image.processing_parameters["flat"] = True
         return image
 
@@ -110,11 +136,11 @@ class DarkTransform(BaseTransform):
     PROVIDES = ["dark"]
 
     def __init__(self, master_dark: Image):
-        image = pyfits.open(master_dark.fixed_parameters["path"])
+        image = fits.open(master_dark.fixed_parameters["path"])
         self.dark = image[0].data
 
     @staticmethod
-    def create_master_dark(images: [Image], save_path=Config.DARK_PATH):
+    def create_master_dark(images: [Image], save_path=CONFIG["DARK_PATH"]):
         """
         Static method to create master flat from given flat images. Save path specified in Config.DARK_PATH
 
@@ -127,11 +153,11 @@ class DarkTransform(BaseTransform):
         counter = 0
         values = []
         for image in images:
-            values.append(pyfits.open(image.fixed_parameters["path"])[0].data)
+            values.append(fits.open(image.fixed_parameters["path"])[0].data)
             counter += 1
         dark_data = np.median(values, axis=0)
-        hdu = pyfits.PrimaryHDU(dark_data)
-        if os.path.exists(save_path) and Config.OVERWRITE:
+        hdu = fits.PrimaryHDU(dark_data)
+        if os.path.exists(save_path) and CONFIG["OVERWRITE"]:
             os.remove(save_path)
         hdu.writeto(save_path)
         return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path, "id": "mdark"}, {})
@@ -142,9 +168,11 @@ class DarkTransform(BaseTransform):
             raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
         if "dark" in image.processing_parameters:
             raise AttributeError("dark correction already applied")
-        img = pyfits.open(image.fixed_parameters["path"])
+        img = fits.open(image.fixed_parameters["path"])
         values = img[0].data - self.dark
         header = img[0].header
+
+        # TODO: time scaling
 
         # path and filename
         old_path = image.fixed_parameters["path"]
@@ -153,11 +181,11 @@ class DarkTransform(BaseTransform):
         new_path = new_path / new_file_name
         image.fixed_parameters["path"] = new_path
         # overrwriting old one
-        if os.path.exists(new_path) and Config.OVERWRITE:
+        if os.path.exists(new_path) and CONFIG["OVERWRITE"]:
             os.remove(new_path)
 
         # writing image to fits and creating image object
-        pyfits.writeto(image.fixed_parameters["path"], values, header)
+        fits.writeto(image.fixed_parameters["path"], values, header)
         image.processing_parameters["dark"] = True
         return image
 
@@ -183,8 +211,8 @@ class PyrafPhotometryTransform(BaseTransform):
 
         :return: filename
         """
-        filename = Config.FILE_DUMP + "xy_coords_file.txt"
-        header = pyfits.getheader(image.get_path())
+        filename = CONFIG["FILE_DUMP"] + "xy_coords_file.txt"
+        header = fits.getheader(image.get_path())
         w = WCS(header)
         pixel_coordinates = []
 
@@ -208,17 +236,17 @@ class PyrafPhotometryTransform(BaseTransform):
         capable.OF_GRAPHICS = False
 
         # File handling
-        temp_final_out = Config.FILE_DUMP + 'TempPhotOut.dat'
+        temp_final_out = CONFIG["FILE_DUMP"] + 'TempPhotOut.dat'
         if os.path.exists(temp_final_out):
             os.remove(temp_final_out)
 
         base = image.fixed_parameters["path"].split('/')[-1]
-        dao_phot_out = Config.FILE_DUMP + base + ".mag.dat"
-        phot_txt_out = Config.FILE_DUMP + base + "PhoTxOut.dat"
+        dao_phot_out = CONFIG["FILE_DUMP"] + base + ".mag.dat"
+        phot_txt_out = CONFIG["FILE_DUMP"] + base + "PhoTxOut.dat"
 
         # Setting pyraf phot parameters
         photpars = iraf.photpars.getParList()
-        iraf.photpars.setParam('apertures', Config.APERTURE)
+        iraf.photpars.setParam('apertures', CONFIG["APERTURE"])
         iraf.phot.setParam('image', image.fixed_parameters["path"])
         iraf.phot.setParam('coords', self._get_coordinates_file(image))
         iraf.phot.setParam('verify', 'no')
@@ -252,6 +280,7 @@ class PyrafPhotometryTransform(BaseTransform):
 
 
 class PythonPhotPhotometryTransform(BaseTransform):
+    # TODO: CHECK FOR PRESENCE OF OBJECTS IN AN IMAGE - PUT INTO IMAGE ? PASS IMAGE LIST
     """
     PythonPhot photometry procedure
 
@@ -271,7 +300,7 @@ class PythonPhotPhotometryTransform(BaseTransform):
 
         :return: filename
         """
-        header = pyfits.getheader(image.get_path())
+        header = fits.getheader(image.get_path())
         w = WCS(header)
         pixel_coordinates_ra = []
         pixel_coordinates_dec = []
@@ -285,10 +314,10 @@ class PythonPhotPhotometryTransform(BaseTransform):
         return np.array(pixel_coordinates_ra), np.array(pixel_coordinates_dec)
 
     def transform(self, image: Image):
-        img = pyfits.getdata(image.get_path())
+        img = fits.getdata(image.get_path())
         xpos, ypos = self._get_coordinates_arrays(image)
         mag, magerr, flux, fluxerr, sky, skyerr, badflag, outstr = \
-            aper.aper(img, xpos, ypos, phpadu=1, apr=Config.APERTURE, zeropoint=24.4,
+            aper.aper(img, xpos, ypos, phpadu=1, apr=CONFIG["APERTURE"], zeropoint=25,
                       skyrad=[40, 50], badpix=[-12000, 1060000],
                       exact=True)  # TODO: parameters? Possible crash at low or no signal
         results = {}
@@ -300,8 +329,13 @@ class PythonPhotPhotometryTransform(BaseTransform):
             i += 1
 
         image.processing_parameters["photometry"] = results
-        image.processing_parameters["src_flux"] = (flux[0], fluxerr[0])
-        image.processing_parameters["sky"] = (sky[0], skyerr[0])
+        # workaround for single object photometry
+        try:
+            image.processing_parameters["src_flux"] = (flux[0], fluxerr[0])
+            image.processing_parameters["sky"] = (sky[0], skyerr[0])
+        except IndexError:
+            image.processing_parameters["src_flux"] = (flux, fluxerr)
+            image.processing_parameters["sky"] = (sky, skyerr)
         return image
 
 
@@ -314,7 +348,6 @@ class ShiftTransform(BaseTransform):
     Writes information about shift and also specific values for each of the stars in the processing parameters under
     shift and shifts respectively.
     """
-    # TODO separate GRB to not be included in the shift calculation
     REQUIRES = ["photometry"]
     PROVIDES = ["shifts"]
 
@@ -359,19 +392,3 @@ class ShiftTransform(BaseTransform):
         image.processing_parameters["shifts"] = shifts
         image.processing_parameters["shift"] = ShiftTransform.calculate_shift(image)
         return image
-
-
-class CalibrateTransform(BaseTransform):
-
-    REQUIRES = ["shift"]
-    PROVIDES = ["lightcurve"]  # << ??
-
-    def __init__(self):
-        pass
-        # TODO
-
-    def transform(self, image: Image):
-        if not self.requirements_check(image):
-            raise ValueError("Missing required transformations on image. Need:" + str(self.REQUIRES))
-        pass
-        # TODO

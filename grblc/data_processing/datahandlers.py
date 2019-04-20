@@ -1,4 +1,3 @@
-import glob
 from abc import ABC
 from pathlib import Path
 from tkinter import Tk
@@ -6,17 +5,14 @@ from tkinter.filedialog import askopenfilenames
 
 import astropy.coordinates as coord
 import astropy.units as u
-from astropy.io import fits as pyfits
+from astropy.io import fits
 from astroquery.vizier import Vizier
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from data_tier_placeholder.database import Frame, Magnitude, Shift, SObject, init_session, Base
-from data_tier_placeholder.image import Image
-from data_tier_placeholder.skyobject import SkyObject
-from config import Config
-
-# TODO: check for possible crashes because of this change (fits to pyfits)
+import grblc.data_processing.database.models as db
+from config import CONFIG
+from grblc.data_processing.datastructures import Image, SkyObject
 
 
 class InvalidQueryError(Exception):
@@ -40,7 +36,6 @@ class DataManagerFactory:
         :return: a handler for type of path and query
         """
         pass
-        # TODO add allowed type options (data/flat/dark/  possibly - grb/star)
 
 
 class BasicHandler(ABC):
@@ -65,13 +60,17 @@ class FileHandler(BasicHandler):
     def __init__(self, folder: str, query=None, data_type="data"):
         super().__init__(folder, query)
         if data_type not in ["flat", "dark", "data", "cdata", "dfdata"]:
-            raise Exception("Invalid data type specified")
+            raise AttributeError("Invalid FITS file type")
 
         self.type = data_type
         if self.query is None:
             self.selector = "*.fits"
         else:
             self.selector = query  # TODO: CHECK FOR VALIDITY OF SELECTOR
+        # TODO: logging debug creation of this (repr?)
+
+    def __repr__(self):
+        return f"FileHandler('{self.type}','{str(self.path)}','{self.selector}')"
 
     def get_list(self):
         # data type and corrections
@@ -86,9 +85,11 @@ class FileHandler(BasicHandler):
 
         p = self.path
         paths = list(p.glob(self.selector))
+
+
         image_list = []
         for im_path in paths:
-                image = pyfits.open(im_path)
+                image = fits.open(im_path)
                 exposure = image[0].header["EXPOSURE"]
                 time_jd = image[0].header["JD"]
                 fixed_pars = {
@@ -101,6 +102,8 @@ class FileHandler(BasicHandler):
                                         processing_parameters=processing_pars))
 
         image_list.sort(key=lambda x: x.get_time_jd())
+        # TODO: logging debug - images
+        # TODO: logging info - len images
         return image_list
 
 
@@ -110,20 +113,24 @@ class FileHandlerDialog:
         if type_string in ["flat", "dark", "data", "ddata", "cdata", "dfdata"]:
             self.type = type_string
         else:
-            raise Exception("Invalid FITS file type")
+            raise AttributeError("Invalid FITS file type")
 
         self.pathlist = self._gen_path_list_from_dialog()
+        # TODO: logging debug creation of this (repr?)
+
+    def __repr__(self):
+        return f"FileHandlerDialog('{self.type}')"
 
     def _gen_path_list_from_dialog(self):
         Tk().withdraw()
         files = askopenfilenames(title="choose {0} type FITS files".format(self.type),
-                                 initialdir=Config.DATA_DIR,
+                                 initialdir=CONFIG["DATA_DIR"],
                                  filetypes=[("FITS files", "*.fits")],
                                  )
         paths = []
         for file in files:
             paths.append(Path(file))
-
+        # TODO: logging debug - paths prints
         return paths
 
     def get_list(self):
@@ -135,7 +142,7 @@ class FileHandlerDialog:
             processing_parameters = {}
         image_list = []
         for path in self.pathlist:
-            image = pyfits.open(path)
+            image = fits.open(path)
             exposure = image[0].header["EXPOSURE"]
             time_jd = image[0].header["JD"]
             fixed_pars = {
@@ -149,147 +156,112 @@ class FileHandlerDialog:
                                     processing_parameters=processing_parameters))
 
         image_list.sort(key=lambda x: x.get_time_jd())
+        # TODO: logging debug - images
+        # TODO: logging info - len images
         return image_list
 
 
-class DatabaseHandler(BasicHandler):
+class DatabaseHandler:
     """
     Handler for interacting with database (sqlite3)
     Allows loading and saving images and object data from database file.
     """
-# TODO: redo using pathlib
-    def __init__(self, path: str, query: str=None):
-        super().__init__(path, query)
+    def __init__(self, connector):
+        self.connector = connector
+        engine = create_engine(connector)
+        db.Base.metadata.bind = engine
+        db.Base.metadata.create_all()
+        Session = sessionmaker()
+        self.session = Session(bind=engine)
+        # TODO: logging debug creation of this (repr?)
+
+    def __repr__(self):
+        return f"DatabaseHandler('{self.connector}"
 
     def get_list(self):
-        # TODO: WORKAROUND engine path sqlite:///
-        engine = create_engine("sqlite:///" + str(self.path))
-        _session = sessionmaker()
-        session = _session(bind=engine)
-        image_list = self._load_images(session)
-        object_list = self._load_objects(session)
-        self._load_photometry(session, image_list)
-        self._load_shifts(session, image_list)
+        image_list = self._load_images()
+        object_list = self._load_objects()
         return image_list, object_list
 
-    @staticmethod
-    def _load_images(session):
+    def _load_images(self):
         image_list = []
-        db_image_list = session.query(Frame).all()
+        db_image_list = self.session.query(db.Frame).all()
+        # TODO: logging debug - list query
+        # TODO: logging info - len of loaded images
         for db_image in db_image_list:
             image_list.append(Image(fixed_parameters={"time_jd": db_image.time_jd,
                                                       "exposure": db_image.exposure,
                                                       "id": db_image.id,
                                                       "type": db_image.type,
                                                       "path": Path(db_image.path)},
-                                    processing_parameters={"dark": True,
-                                                           "flat": True,
-                                                           "shift": (db_image.shift, db_image.shifterr)}))
+                                    processing_parameters=eval(db_image.additional)))
+            print(db_image.additional)
         return image_list
 
-    @staticmethod
-    def _load_objects(session):
-
+    def _load_objects(self):
         object_list = []
-        db_obj_list = session.query(SObject).all()
+        db_obj_list = self.session.query(db.SObject).all()
+        # TODO: logging debug - list query
+        # TODO: logging info - len of loaded objects
         for db_obj in db_obj_list:
             object_list.append(SkyObject(fixed_parameters={"ra": db_obj.ra,
                                                            "dec": db_obj.dec,
                                                            "id": db_obj.id,
-                                                           "type": "star",
-                                                           "catalog_magnitude": (db_obj.catmag, db_obj.catmagerr)}))
+                                                           "type": db_obj.type},
+                                         processing_parameters=eval(db_obj.additional)))
         return object_list
 
-    @staticmethod
-    def _load_photometry(session, image_list):
-        for image in image_list:
-            star_list = session.query(Magnitude).filter(Magnitude.frame_id == image.fixed_parameters["id"]).all()
-            photometry = {}
-            for star in star_list:
-                photometry[star.star_id] = (star.mag, star.magerr)
-            image.processing_parameters["photometry"] = photometry
+    def save_objects_and_images(self, image_list: [Image], object_list: [SkyObject]):
+        """
 
-    @staticmethod
-    def _load_shifts(session, image_list):
-        for image in image_list:
-            star_list = session.query(Shift).filter(Shift.frame_id == image.fixed_parameters["id"]).all()
-            shifts = {}
-            for star in star_list:
-                shifts[star.star_id] = (star.shift, star.shifterr)
-            image.processing_parameters["shifts"] = shifts
-
-    @staticmethod
-    def save_objects_and_images(image_list: [Image], object_list: [SkyObject]):
-        """Saves everything from object list and image list to database specified in Config.DB_ENGINE.
-        Destination db can be changed through session engine parameter or in config"""
-
-        session = init_session()
-
+        :param image_list:
+        :param object_list:
+        :return:
+        """
         # frames
         for image in image_list:
-            session.add(Frame(id=image.get_id(),
-                              time_jd=image.get_time_jd(),
-                              type=image.get_type(),
-                              exposure=image.get_exposure(),
-                              path=str(image.get_path()),
-                              shift=image.get_shift()[0],
-                              shifterr=image.get_shift()[1]))
+            additional = image.processing_parameters
+            frame = db.Frame(id=image.get_id(),
+                             time_jd=image.get_time_jd(),
+                             type=image.get_type(),
+                             exposure=image.get_exposure(),
+                             path=str(image.get_path()),
+                             additional=str(additional))
+
+            self.session.merge(frame)
+            # TODO: logging debug added frame
+            # TODO: logging info added frames - len(image_list)
 
         # objects
         for skyobject in object_list:
-            session.add(SObject(id=str(skyobject.get_id()),
-                                ra=skyobject.get_ra(),
-                                dec=skyobject.get_dec(),
-                                catmag=skyobject.get_catalog_magnitude()[0],
-                                catmagerr=skyobject.get_catalog_magnitude()[1]))
+            additional = skyobject.processing_parameters
+            sobject = db.SObject(id=str(skyobject.get_id()),
+                                 ra=skyobject.get_ra(),
+                                 dec=skyobject.get_dec(),
+                                 additional=str(additional))
 
-        # processing pars
-        for image in image_list:
-            for star_id, magnitude in image.get_photometry().items():
-                session.add(Magnitude(star_id=str(star_id),
-                                      frame_id=image.get_id(),
-                                      mag=magnitude[0],
-                                      magerr=magnitude[1]))
-            # TODO: formatting of Shifts parameter after calculating (for saving-missing ID-not needed only for tests)
-        for image in image_list:
-            for star_id, shift in image.get_shifts().items():
-                session.add(Shift(star_id=str(star_id),
-                                  frame_id=image.get_id(),
-                                  shift=shift[0],
-                                  shifterr=shift[1]))
-        Base.metadata.create_all()
-        session.commit()
-    # TODO: location of base, engine etc.
+            self.session.merge(sobject)
+            # TODO: logging debug added object
+            # TODO: logging info added objects number - len(object list)
+        self.session.commit()
 
 
 class ObjectHandler:
+    # TODO update docs
     """Handler to create list of objects in specified vicinity of given target
 
-    Supported catalogues:
-        APASS
-        NOMAD
-
-    Usage:
-        If not specified the default values for area around target coordinates are:
-            radius = 0.1 degrees
-            catalog: APASS
-            lower magnitude limit: 16 mag
-            maximum objects is 100
-
-        Initialize with target object (GRB) and specify result limit if necessary. You can change default values in
-        get_list() call as follows:
-
-            ObjectHandler(target).get_list(mag_limit = 20, catalog= "NOMAD", radius = 2 * u.deg)
-
-         * - Units for radius are in degrees
 
     """
-    # TODO Static methods?
 
     def __init__(self, target: SkyObject, result_limit=100):
         self.target = target
         self.limit = result_limit
 
+    def __repr__(self):
+        return f"ObjectHandler('{self.target}','{self.limit}')"
+
+    # TODO: logging debug found objects and query pars
+    # TODO: logging info amount of objects found in radius cat and mag
     def get_list(self, mag_limit=16., catalog="APASS", radius=0.1,):
         """
 
@@ -298,6 +270,7 @@ class ObjectHandler:
         :param radius: radius in degrees
         :return: Object type list with target and objects in specified vicinity
         """
+        # TODO: logging debug calling and pars
         if catalog == "APASS":
             return self.vizier_query_object_list_apass(self.target, radius, mag_limit)
         if catalog == "NOMAD":
@@ -328,11 +301,11 @@ class ObjectHandler:
         object_list = [target]
         i = 1
         for o in result[0]:
-            object_list.append(SkyObject({"ra": o['RAJ2000'],
-                                          "dec": o['DEJ2000'],
-                                          "catalog_magnitude": (o['Vmag'], o['e_Vmag']),
-                                          "id": o["recno"],
-                                          "type": "star"}))
+            object_list.append(SkyObject.star(ra=o['RAJ2000'],
+                                              dec=o['DEJ2000'],
+                                              catalog_magnitude=(o['Vmag'], o['e_Vmag']),
+                                              cat_filter="V",
+                                              id=o["recno"]))
             i += 1
 
         return object_list
@@ -346,6 +319,8 @@ class ObjectHandler:
         :param mag_limit: limiting lower magnitude for star selection
         :return: list of objects and the GRB
         """
+
+    # TODO : change IDs
         vizier_query = Vizier(columns=['RAJ2000', 'DEJ2000', 'Vmag'],
                               column_filters={"Vmag": "<"+str(mag_limit)},
                               row_limit=self.limit)
@@ -360,11 +335,11 @@ class ObjectHandler:
         object_list = [target]
         i = 1
         for o in result[0]:
-            object_list.append(SkyObject({"ra": o['RAJ2000'],
-                                          "dec": o['DEJ2000'],
-                                          "catalog_magnitude": (o['Vmag'], o['e_Vmag']),
-                                          "id": i,
-                                          "type": "star"}))
+            object_list.append(SkyObject(SkyObject.star(ra=o['RAJ2000'],
+                                                        dec=o['DEJ2000'],
+                                                        catalog_magnitude=(o['Vmag'], o['e_Vmag']),
+                                                        cat_filter="V",
+                                                        id=i)))
             i += 1
 
         return object_list
