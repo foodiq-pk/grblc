@@ -331,11 +331,11 @@ class PythonPhotPhotometryTransform(BaseTransform):
         image.processing_parameters["photometry"] = results
         # workaround for single object photometry
         try:
-            image.processing_parameters["src_flux"] = (flux[0], fluxerr[0])
-            image.processing_parameters["sky"] = (sky[0], skyerr[0])
+            image.processing_parameters["src_flux"] = (float(flux[0]), float(fluxerr[0]))
+            image.processing_parameters["sky"] = (float(sky[0]), float(skyerr[0]))
         except IndexError:
-            image.processing_parameters["src_flux"] = (flux, fluxerr)
-            image.processing_parameters["sky"] = (sky, skyerr)
+            image.processing_parameters["src_flux"] = (float(flux), float(fluxerr))
+            image.processing_parameters["sky"] = (float(sky), float(skyerr))
         return image
 
 

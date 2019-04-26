@@ -50,7 +50,7 @@ def stack_until_err_or_limit(image_list, limiting_magnitude_error, grb, max_fram
         # test this one
         names = []
         if "stack" in image.processing_parameters:
-            names = image.get_stack
+            names = image.get_stack()
         else:
             pass
         # TODO: check the condition (S/N or error)
@@ -121,7 +121,7 @@ def stack_until_err_or_limit(image_list, limiting_magnitude_error, grb, max_fram
                     if os.path.exists(file_path) and CONFIG["OVERWRITE"]:
                         os.remove(file_path)
                     fits.writeto(file_path, stacked_image_data, header)
-                    names.append(image_to_add.get_path())
+                    names.append(str(image_to_add.get_path()))
 
                     # new image object
                     stacked_image = Image(fixed_parameters={"path": file_path,
@@ -296,7 +296,7 @@ def stacking_procedure(images: [Image]):
             for name in image.get_stack():
                 names.append(name)
         else:
-            names.append(image.get_path())
+            names.append(str(image.get_path()))
         i += 1
         if i == half:
             header = fits.getheader(image.get_path())
