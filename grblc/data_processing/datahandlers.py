@@ -206,7 +206,7 @@ class DatabaseHandler:
         for db_obj in db_obj_list:
             object_list.append(SkyObject(fixed_parameters={"ra": db_obj.ra,
                                                            "dec": db_obj.dec,
-                                                           "id": db_obj.id,
+                                                           "id": str(db_obj.id),
                                                            "type": db_obj.type},
                                          processing_parameters=eval(db_obj.additional)))
         return object_list
@@ -238,6 +238,7 @@ class DatabaseHandler:
             sobject = db.SObject(id=str(skyobject.get_id()),
                                  ra=skyobject.get_ra(),
                                  dec=skyobject.get_dec(),
+                                 type=skyobject.get_type(),
                                  additional=str(additional))
 
             self.session.merge(sobject)
