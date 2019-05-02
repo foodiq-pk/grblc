@@ -163,7 +163,7 @@ class SkyObject(DataStructure):
         fixed_pars = {"id": name,
                       "ra": ra,
                       "dec": dec,
-                      "type": "star"
+                      "type": "grb"
                       }
         processing_pars = {"jd_trigger": trigger_jd}
         return SkyObject(fixed_parameters=fixed_pars, processing_parameters=processing_pars)

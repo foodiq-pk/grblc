@@ -14,6 +14,19 @@ from external.PythonPhot import aper
 from grblc.data_processing.datastructures import Image, SkyObject
 
 
+class TransformatorManager:
+
+    def __init__(self, transform_list):
+        transform_list.sort(key=lambda x: x.VALUE)
+        self.transformator = Transformator(transform_list)
+
+    def apply_transformations(self, image_list):
+        transformed_list = []
+        for image in image_list:
+            transformed_list.append(self.transformator.apply(image))
+        return transformed_list
+
+
 class Transformator:
     """
     Class to combine all transforms to be applied on an image.
@@ -25,6 +38,7 @@ class Transformator:
         Must be initialized in order of application.
         :param transformators: list of transformators
         """
+        transformators.sort(key=lambda x: x.VALUE)
         self.transformators = transformators
 
     def apply(self, image: Image):
@@ -72,10 +86,14 @@ class FlatTransform(BaseTransform):
     """
     REQUIRES = ["dark"]
     PROVIDES = ["flat"]
+    VALUE = 2
 
     def __init__(self, master_flat: Image):
-        image = fits.open(master_flat.fixed_parameters["path"])
-        self.flat = image[0].data
+        try:
+            image = fits.open(master_flat.fixed_parameters["path"])
+            self.flat = image[0].data
+        except AttributeError:
+            raise AttributeError("Accepts only single Image type object as an argument")
 
     @staticmethod
     def create_master_flat(images: [Image], save_path: str =CONFIG["FLAT_PATH"]):
@@ -134,10 +152,15 @@ class DarkTransform(BaseTransform):
     """
     REQUIRES = []
     PROVIDES = ["dark"]
+    # value to order transformations in a logicla order of application
+    VALUE = 1
 
     def __init__(self, master_dark: Image):
-        image = fits.open(master_dark.fixed_parameters["path"])
-        self.dark = image[0].data
+        try:
+            image = fits.open(master_dark.fixed_parameters["path"])
+            self.dark = image[0].data
+        except AttributeError:
+            raise AttributeError("Accepts only single Image type object as an argument")
 
     @staticmethod
     def create_master_dark(images: [Image], save_path=CONFIG["DARK_PATH"]):
@@ -202,6 +225,8 @@ class PyrafPhotometryTransform(BaseTransform):
     """
     REQUIRES = ["dark", "flat"]
     PROVIDES = ["photometry"]
+    # value to order transformations in a logicla order of application
+    VALUE = 3
 
     def __init__(self, object_list: [SkyObject]):
         self.objects = object_list
@@ -291,6 +316,8 @@ class PythonPhotPhotometryTransform(BaseTransform):
     """
     REQUIRES = ["dark", "flat"]
     PROVIDES = ["photometry"]
+    # value to order transformations in a logicla order of application
+    VALUE = 3
 
     def __init__(self, object_list: [SkyObject]):
         self.objects = object_list
@@ -350,6 +377,9 @@ class ShiftTransform(BaseTransform):
     """
     REQUIRES = ["photometry"]
     PROVIDES = ["shifts"]
+
+    # value to order transformations in a logicla order of application
+    VALUE = 4
 
     def __init__(self, object_list: [SkyObject]):
         ol = []
