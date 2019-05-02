@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 import ccdproc
+import matplotlib.pyplot as plt
+import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
 from ccdproc import wcs_project
@@ -14,9 +16,102 @@ from grblc.image_processing.transformators import PythonPhotPhotometryTransform,
 
 
 class StackingManager:
-    """class for handling stacking procedures"""
-    pass
-    # TODO
+    """class for handling stacking procedure"""
+
+    def __init__(self, image_list, grb=None):
+        self.images = image_list
+        self.grb = grb
+        self.to_stack = None
+        self.single_images = None
+        self.flux_predictions = None
+        self.stacked_images = None
+
+    def plot_stack_prediction(self):
+        """lets you visualize what images were selected for stacking,
+        needs a grb object when creating stacking manager"""
+
+        try:
+            if self.grb is None:
+                raise RuntimeError("To plot prediction you need to specify grb object when creating stack manager.")
+            gtime, gtimerr, gmag, gmagerr = self.grb.get_raw_light_curve(self.images)
+            plt.errorbar(x=gtime, xerr=gtimerr, y=gmag, yerr=gmagerr, fmt='k.')
+            for image_list in self.to_stack:
+                gtime, gtimerr, gmag, gmagerr = self.grb.get_raw_light_curve(image_list)
+                plt.errorbar(x=gtime, xerr=gtimerr, y=gmag, yerr=gmagerr, fmt='.')
+            plt.gca().invert_yaxis()
+            plt.xscale("log")
+            plt.show()
+        except AttributeError:
+            raise RuntimeError("No images to stack selected. Run select_images_to_stack() first.")
+
+
+    # def plot_sn_prediction(self):
+    #     pass
+
+    def select_images_to_stack(self, sn_limit):
+        "Picks images based on signal to noise specified limit, predicts s/n of images to be stacked to pass the limit"
+        # TODO: time interval limitations
+        i = 0
+        # TODO: logging INFO stacking amount
+
+        self.single_images = []
+        self.to_stack = []
+        self.flux_predictions = []
+        while i < len(self.images):
+            image = self.images[i]
+            if image.get_src_flux()[0] / image.get_src_flux()[1] < sn_limit:
+                stack = []
+                src_fluxes = [image.get_src_flux()[0], image.get_src_flux()[1] ** 2]
+                sn_sq = src_fluxes[0] ** 2 / src_fluxes[1]
+
+                stack.append(image)
+                i += 1
+                while sn_sq < sn_limit ** 2 and i < len(self.images):
+                    image = self.images[i]
+                    stack.append(image)
+                    src_fluxes[0] += image.get_src_flux()[0]
+                    src_fluxes[1] += image.get_src_flux()[1] ** 2
+                    sn_sq = src_fluxes[0] ** 2 / src_fluxes[1]
+
+                    i += 1
+                self.to_stack.append(stack)
+                self.flux_predictions.append(np.sqrt(sn_sq))
+            else:
+                self.single_images.append(image)
+                i += 1
+        # TODO: logging debug what was created and stacks..
+
+    def stack_images(self):
+        "Run stacking procedure on prepared stacks object, needs to have selection done first"
+        # TODO: logging info statistics
+        try:
+            self.stacked_images = []
+            for ims in self.to_stack:
+                self.stacked_images.append(stacking_procedure(ims))
+        except TypeError:
+            raise RuntimeError("No images to stack selected. Run select_images_to_stack() first.")
+
+    def stack_images_multicore(self, method, cores=1):
+        """allows user to paralelize stacking procedure to be run on specified amount of cores,
+        defaults to one which is equivalent to reular stack images method"""
+        raise NotImplementedError
+
+    def save_stacks(self, folder):
+        """ when specifying folder moves results of stacking from temporary folder to the specified folder
+        modifies path of Image object in stacked_images attribute to be affiliated with new location"""
+        raise NotImplementedError
+
+    def get_flux_predictions(self):
+        return self.flux_predictions
+
+    def get_list(self):
+        """returns combined and time sorted list of images after stacking"""
+        try:
+            merged_list = self.stacked_images + self.single_images
+            merged_list.sort(key=lambda x: x.get_time_jd())
+            return merged_list
+        except TypeError:
+            raise RuntimeError("Images not stacked. Run stack_images() first.")
 
 
 def stack_until_err_or_limit(image_list, limiting_magnitude_error, grb, max_frames=15):
@@ -258,7 +353,7 @@ def stack_using_sequence(image_list, sequence):
 
     single_images, images_to_stack = group_by_sequence(image_list, sequence)
     final_list = stack_and_append_to_old(images_to_stack, image_list)
-    final_list.sort(key = (lambda x: x.get_time_jd()))
+    final_list.sort(key=(lambda x: x.get_time_jd()))
     return final_list
 
 

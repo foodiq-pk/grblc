@@ -1,9 +1,8 @@
-from data_tier_placeholder.image import Image
 from matplotlib import pyplot as plt
-from data_tier_placeholder.datahandlers import *
-from image_processing.transformators import *
-from image_processing.transformatormanager import *
-from config import  Config
+
+from grblc.data_processing.datahandlers import *
+from grblc.image_processing.transformators import *
+from grblc.image_processing.transformators import Transformator
 
 
 def plot_src_flux(image_list: [Image]):
@@ -13,7 +12,17 @@ def plot_src_flux(image_list: [Image]):
     for img in image_list:
         time.append(img.get_time_jd())
         src_flux.append(img.get_src_flux()[0])
-    plt.plot(time, src_flux, ".")
+    plt.plot(time, src_flux, "x")
+
+
+def plot_sn(image_list: [Image]):
+    time = []
+    sn = []
+
+    for img in image_list:
+        time.append(img.get_time_jd())
+        sn.append(img.get_src_flux()[0]/ img.get_src_flux()[1])
+    plt.plot(time,sn,"+")
 
 
 def plot_sky(image_list: [Image]):
@@ -22,7 +31,7 @@ def plot_sky(image_list: [Image]):
     for img in image_list:
         time.append(img.get_time_jd())
         sky.append(img.get_sky()[0])
-    plt.plot(time, sky, ".")
+    plt.plot(time, sky, "x")
 
 
 if __name__ == "__main__":
@@ -94,9 +103,6 @@ if __name__ == "__main__":
 
     # save results to database file specified in config
     # overwriting just now, gonna change later
-    if os.path.exists("/tmp/test.db"):
-        os.remove("/tmp/test.db")
-    DatabaseHandler.save_objects_and_images(image_list=output_data, object_list=object_list)
 
     # plot data
     object_list[0].plot_light_curve(output_data)

@@ -172,6 +172,7 @@ class DarkTransform(BaseTransform):
         :param save_path: Optional save path
         :return: master flat as Image type object
         """
+        # TODO: exposure counting
         dark_filename = "master_dark" + datetime.now().strftime("_%H-%M-%Y-%d-%m") + ".fits"
         save_path = Path(save_path) / dark_filename
         counter = 0
