@@ -15,7 +15,8 @@ from grblc.data_processing.datastructures import Image, SkyObject
 
 
 class TransformatorManager:
-
+    """transformator manager for applying transformators to whole image list
+    Takes transform list in constructor and applies transformation onto passed image list"""
     def __init__(self, transform_list):
         transform_list.sort(key=lambda x: x.VALUE)
         self.transformator = Transformator(transform_list)
