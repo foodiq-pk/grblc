@@ -23,7 +23,7 @@ class StackingManager:
         self.grb = grb
         self.to_stack = None
         self.single_images = None
-        self.flux_predictions = None
+        self.sn_prediction = None
         self.stacked_images = None
 
     def plot_stack_prediction(self):
@@ -56,7 +56,7 @@ class StackingManager:
 
         self.single_images = []
         self.to_stack = []
-        self.flux_predictions = []
+        self.sn_prediction = []
         while i < len(self.images):
             image = self.images[i]
             if image.get_src_flux()[0] / image.get_src_flux()[1] < sn_limit:
@@ -75,7 +75,7 @@ class StackingManager:
 
                     i += 1
                 self.to_stack.append(stack)
-                self.flux_predictions.append(np.sqrt(sn_sq))
+                self.sn_prediction.append(np.sqrt(sn_sq))
             else:
                 self.single_images.append(image)
                 i += 1
@@ -101,8 +101,8 @@ class StackingManager:
         modifies path of Image object in stacked_images attribute to be affiliated with new location"""
         raise NotImplementedError
 
-    def get_flux_predictions(self):
-        return self.flux_predictions
+    def get_sn_predictions(self):
+        return self.sn_prediction
 
     def get_list(self):
         """returns combined and time sorted list of images after stacking"""

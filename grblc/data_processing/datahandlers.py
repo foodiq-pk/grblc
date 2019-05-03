@@ -195,7 +195,6 @@ class DatabaseHandler:
                                                       "type": db_image.type,
                                                       "path": Path(db_image.path)},
                                     processing_parameters=eval(db_image.additional)))
-            print(db_image.additional)
         return image_list
 
     def _load_objects(self):
