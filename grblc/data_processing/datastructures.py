@@ -242,3 +242,29 @@ class SkyObject(DataStructure):
         plt.grid()
         plt.gca().invert_yaxis()
         plt.show()
+
+    def plot_light_curve_grb(self, image_list, type="raw", timeerr=False, magerr=False, since_trigger=False, log=False):
+        if type is "raw":
+            time, time_errs, mag, mag_errs = self.get_raw_light_curve(image_list)
+        elif type is "shifted":
+            time, time_errs, mag, mag_errs = self.get_shifted_light_curve(image_list)
+        else:
+            raise ValueError("Invalid light curve type")
+        if since_trigger:
+            time = (np.array(time) - self.get_trigger_jd()) * 86400
+            time_errs = (np.array(time_errs) * 86400)
+            xlabel = "Time since trigger, [s]"
+        else:
+            xlabel = "Time in JD [days]"
+        if timeerr is False:
+            time_errs = None
+        if magerr is False:
+            mag_errs = None
+        plt.errorbar(time, mag, yerr=mag_errs, xerr=time_errs, fmt=".")
+        if log:
+            plt.xscale('log')
+        plt.xlabel(xlabel)
+        plt.ylabel("Magnitude [mag]")
+        plt.grid()
+        plt.gca().invert_yaxis()
+        plt.show()

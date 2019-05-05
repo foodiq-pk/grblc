@@ -158,34 +158,38 @@ class DarkTransform(BaseTransform):
 
     def __init__(self, master_dark: Image):
         try:
-            image = fits.open(master_dark.fixed_parameters["path"])
-            self.dark = image[0].data
+            self.image = master_dark
+            img = fits.open(master_dark.fixed_parameters["path"])
+            self.dark = img[0].data
         except AttributeError:
             raise AttributeError("Accepts only single Image type object as an argument")
 
     @staticmethod
-    def create_master_dark(images: [Image], save_path=CONFIG["DARK_PATH"]):
+    def create_master_dark(images: [Image], exposure=20,  save_path=CONFIG["DARK_PATH"]):
         """
         Static method to create master flat from given flat images. Save path specified in Config.DARK_PATH
 
         :param images: Dark images list
         :param save_path: Optional save path
+        :param exposure: exposure of input dark images to be selected and combined
         :return: master flat as Image type object
         """
-        # TODO: exposure counting
         dark_filename = "master_dark" + datetime.now().strftime("_%H-%M-%Y-%d-%m") + ".fits"
         save_path = Path(save_path) / dark_filename
         counter = 0
         values = []
         for image in images:
-            values.append(fits.open(image.fixed_parameters["path"])[0].data)
-            counter += 1
+            if image.get_exposure() == exposure:
+                values.append(fits.open(image.fixed_parameters["path"])[0].data)
+                counter += 1
+        if counter == 0:
+            raise RuntimeError("No darks with given exposure")
         dark_data = np.median(values, axis=0)
         hdu = fits.PrimaryHDU(dark_data)
         if os.path.exists(save_path) and CONFIG["OVERWRITE"]:
             os.remove(save_path)
         hdu.writeto(save_path)
-        return Image({"time_jd": 0, "exposure": 0, "type": "dark", "path": save_path, "id": "mdark"}, {})
+        return Image({"time_jd": 0, "exposure": 20, "type": "dark", "path": save_path, "id": "mdark"}, {})
 
     def transform(self, image: Image):
 
@@ -194,10 +198,9 @@ class DarkTransform(BaseTransform):
         if "dark" in image.processing_parameters:
             raise AttributeError("dark correction already applied")
         img = fits.open(image.fixed_parameters["path"])
-        values = img[0].data - self.dark
+        values = img[0].data - image.get_exposure() / self.image.get_exposure() * self.dark
         header = img[0].header
 
-        # TODO: time scaling
 
         # path and filename
         old_path = image.fixed_parameters["path"]
