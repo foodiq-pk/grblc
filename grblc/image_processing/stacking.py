@@ -288,7 +288,7 @@ def stacking_procedure(images: [Image]):
     final_image_data.wcs = WCS(header)
     header["EXPTIME"] = timecoverage
     header["EXPOSURE"] = timecoverage
-    header["JD"] = timejd_mid
+    header["JD"] = tfirst
 
     filename = "stack-" + str(timejd_mid) + "-e" + "{:.0f}".format(timecoverage) + ".fits"
 
@@ -301,7 +301,7 @@ def stacking_procedure(images: [Image]):
 
     stacked_image = Image(fixed_parameters={"path": path,
                                             "exposure": timecoverage,
-                                            "time_jd": timejd_mid,
+                                            "time_jd": tfirst,
                                             "type": "data", "id": filename},
                           processing_parameters={"flat": True,
                                                  "dark": True,
