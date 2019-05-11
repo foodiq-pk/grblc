@@ -42,7 +42,7 @@ class DataStructure(ABC):
 
 class Image(DataStructure):
     """
-    Image class data object, contains
+    Class representing an image, contains information about image and procedures applied
     """
     REQUIRES = ["time_jd", "exposure", "path", "type", "id"]
 
@@ -112,7 +112,8 @@ class Image(DataStructure):
 
 class SkyObject(DataStructure):
     """
-    # TODO
+    Data structure representing an object be it Star or GRB
+
     """
 
     REQUIRES = ["ra", "dec", "id", "type"]
@@ -132,13 +133,12 @@ class SkyObject(DataStructure):
     def star(id: str, ra: float, dec: float, catalog_magnitude: tuple, cat_filter: str):
         """
         Static method to create a star object
-        :param id:
-        :param ra:
-        :param dec:
+        :param id: star id
+        :param ra: ra in degrees
+        :param dec: dec in degrees
         :param catalog_magnitude: tuple with catalog magnitudes
-        :return:
+        :return: SkyObject of star type
         """
-        # TODO: docs
         fixed_pars = {"id": id,
                       "ra": ra,
                       "dec": dec,
@@ -152,13 +152,12 @@ class SkyObject(DataStructure):
     def grb(name, ra, dec, trigger_jd):
         """
         Static method to create grb object
-        :param name:
-        :param ra:
-        :param dec:
-        :param trigger_jd:
-        :return:
+        :param name: grb name
+        :param ra: ra in degrees
+        :param dec: dec in degrees
+        :param trigger_jd: trigger time in julian date
+        :return: SkyObject of GRB type
         """
-        # TODO: docs
 
         fixed_pars = {"id": name,
                       "ra": ra,
@@ -221,7 +220,7 @@ class SkyObject(DataStructure):
                 times.append(img.get_time_jd() + img.get_exposure()/84600/2)
                 time_errs.append(img.get_exposure()/84600/2)
                 values.append(mag + img.get_shift()[0])
-                value_errs.append( np.sqrt(magerr**2 + img.get_shift()[1]**2))
+                value_errs.append(np.sqrt(magerr**2 + img.get_shift()[1]**2))
         return times, time_errs, values, value_errs
 
     def plot_light_curve(self, image_list, type="raw", timeerr=False, magerr=False):

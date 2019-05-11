@@ -52,7 +52,6 @@ class Transformator:
         for transformator in self.transformators:
             cpimage = transformator.transform(cpimage)
         return cpimage
-# TODO: class gets list and applies it to all images, returns modified list
 
 
 class BaseTransform(ABC):
@@ -310,7 +309,6 @@ class PyrafPhotometryTransform(BaseTransform):
 
 
 class PythonPhotPhotometryTransform(BaseTransform):
-    # TODO: CHECK FOR PRESENCE OF OBJECTS IN AN IMAGE - PUT INTO IMAGE ? PASS IMAGE LIST
     """
     PythonPhot photometry procedure
 
@@ -324,8 +322,9 @@ class PythonPhotPhotometryTransform(BaseTransform):
     # value to order transformations in a logicla order of application
     VALUE = 3
 
-    def __init__(self, object_list: [SkyObject]):
+    def __init__(self, object_list: [SkyObject], aperture=CONFIG['APERTURE']):
         self.objects = object_list
+        self.aperture = aperture
 
     def _get_coordinates_arrays(self, image: Image):
         """ Creates coordinates arrays for photometry using wcs coordinates in FITS header.
@@ -349,9 +348,9 @@ class PythonPhotPhotometryTransform(BaseTransform):
         img = fits.getdata(image.get_path())
         xpos, ypos = self._get_coordinates_arrays(image)
         mag, magerr, flux, fluxerr, sky, skyerr, badflag, outstr = \
-            aper.aper(img, xpos, ypos, phpadu=1, apr=CONFIG["APERTURE"], zeropoint=25,
+            aper.aper(img, xpos, ypos, phpadu=1, apr=self.aperture, zeropoint=25,
                       skyrad=[40, 50], badpix=[-12000, 1060000],
-                      exact=True)  # TODO: parameters? Possible crash at low or no signal
+                      exact=True)
         results = {}
         i = 0
         for o in self.objects:

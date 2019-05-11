@@ -15,29 +15,6 @@ from config import CONFIG
 from grblc.data_processing.datastructures import Image, SkyObject
 
 
-class InvalidQueryError(Exception):
-    pass
-
-
-class DataManagerFactory:
-    """
-    Factory class for selecting desired handlers based on path and query type.
-    """
-    @staticmethod
-    def get_handler(path: str, query: str=None):
-        """
-        Supplies handler based on type of path:
-        "sqlite:" gets database handler with path to it given db file (e.g.  sqlite:/tmp/temp.db)
-        "/tmp/"   gets file handler with getting all files in a folder restricted by query
-        "/tmp/file.fits" gets file handler for single file
-        query format: shell regex with space delimiter for additional type specification
-        :param path:
-        :param query: a query string in format "regex type_specification" for example "*df.fits data"
-        :return: a handler for type of path and query
-        """
-        pass
-
-
 class BasicHandler(ABC):
 
     def __init__(self, path: str, query: str=None):
@@ -54,7 +31,7 @@ class FileHandler(BasicHandler):
     """
     Handler for file and folder type queries.
     Only allows generation of lists of images and single image objects
-    Examples of usage:
+
 
     """
     def __init__(self, folder: str, query=None, data_type="data"):
@@ -66,7 +43,7 @@ class FileHandler(BasicHandler):
         if self.query is None:
             self.selector = "*.fits"
         else:
-            self.selector = query  # TODO: CHECK FOR VALIDITY OF SELECTOR
+            self.selector = query
         # TODO: logging debug creation of this (repr?)
 
     def __repr__(self):
@@ -85,7 +62,6 @@ class FileHandler(BasicHandler):
 
         p = self.path
         paths = list(p.glob(self.selector))
-
 
         image_list = []
         for im_path in paths:
@@ -108,7 +84,8 @@ class FileHandler(BasicHandler):
 
 
 class FileHandlerDialog:
-    """DIalog version of file handler for interactive usage"""
+    """DIalog version of file handler for interactive usage.
+        only needs data type when instantiating"""
     def __init__(self, type_string):
         if type_string in ["flat", "dark", "data", "ddata", "cdata", "dfdata"]:
             self.type = type_string
@@ -165,6 +142,7 @@ class DatabaseHandler:
     """
     Handler for interacting with database (sqlite3)
     Allows loading and saving images and object data from database file.
+    Has to be created with a db connector format string which will link either database or database file.
     """
     def __init__(self, connector):
         self.connector = connector
@@ -195,7 +173,7 @@ class DatabaseHandler:
                                                       "type": db_image.type,
                                                       "path": Path(db_image.path)},
                                     processing_parameters=eval(db_image.additional)))
-        return image_list
+        return self._string_ids(image_list)
 
     def _load_objects(self):
         object_list = []
@@ -210,11 +188,25 @@ class DatabaseHandler:
                                          processing_parameters=eval(db_obj.additional)))
         return object_list
 
+    @staticmethod
+    def _string_ids(image_list):
+        """helper method to recreate string ids"""
+        for img in image_list:
+            try:
+                img.processing_parameters["photometry"] = dict(((str(k), val) for k,val in img.get_photometry().items()))
+            except:
+                continue
+            try:
+                img.processing_parameters["shifts"] = dict(((str(k), val) for k, val in img.get_shifts().items()))
+            except:
+                continue
+        return image_list
+
     def save_objects_and_images(self, image_list: [Image], object_list: [SkyObject]):
         """
-
-        :param image_list:
-        :param object_list:
+        Saves objects to db
+        :param image_list: images to save
+        :param object_list: objects to save
         :return:
         """
         # frames
@@ -320,8 +312,7 @@ class ObjectHandler:
         :return: list of objects and the GRB
         """
 
-    # TODO : change IDs
-        vizier_query = Vizier(columns=['RAJ2000', 'DEJ2000', 'Vmag'],
+        vizier_query = Vizier(columns=['NOMAD1','RAJ2000', 'DEJ2000', 'Vmag'],
                               column_filters={"Vmag": "<"+str(mag_limit)},
                               row_limit=self.limit)
         coordinates = coord.SkyCoord(target.fixed_parameters["ra"],
@@ -333,13 +324,11 @@ class ObjectHandler:
                                            catalog="NOMAD")
 
         object_list = [target]
-        i = 1
         for o in result[0]:
-            object_list.append(SkyObject(SkyObject.star(ra=o['RAJ2000'],
-                                                        dec=o['DEJ2000'],
-                                                        catalog_magnitude=(o['Vmag'], o['e_Vmag']),
-                                                        cat_filter="V",
-                                                        id=i)))
-            i += 1
+            object_list.append(SkyObject.star(ra=o['RAJ2000'],
+                                              dec=o['DEJ2000'],
+                                              catalog_magnitude=(o['Vmag'], 0.08),
+                                              cat_filter="V",
+                                              id=str(o['NOMAD1'])))
 
         return object_list

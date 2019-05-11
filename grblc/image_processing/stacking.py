@@ -1,6 +1,5 @@
 import os
 from copy import deepcopy
-from datetime import datetime
 from pathlib import Path
 
 import ccdproc
@@ -10,7 +9,6 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from ccdproc import wcs_project
 
-from config import CONFIG
 from grblc.data_processing.datastructures import Image
 from grblc.image_processing.transformators import PythonPhotPhotometryTransform, Transformator
 
@@ -34,12 +32,24 @@ class StackingManager:
             if self.grb is None:
                 raise RuntimeError("To plot prediction you need to specify grb object when creating stack manager.")
             gtime, gtimerr, gmag, gmagerr = self.grb.get_raw_light_curve(self.images)
-            plt.errorbar(x=gtime, xerr=gtimerr, y=gmag, yerr=gmagerr, fmt='k.')
+            plt.errorbar(x=(np.array(gtime) - self.grb.get_trigger_jd()) * 86400,
+                         xerr=np.array(gtimerr) * 86400,
+                         y=gmag,
+                         yerr=gmagerr,
+                         fmt='k.')
             for image_list in self.to_stack:
                 gtime, gtimerr, gmag, gmagerr = self.grb.get_raw_light_curve(image_list)
-                plt.errorbar(x=gtime, xerr=gtimerr, y=gmag, yerr=gmagerr, fmt='.')
+                plt.errorbar(x=(np.array(gtime) - self.grb.get_trigger_jd()) * 86400,
+                             xerr=np.array(gtimerr) * 86400,
+                             y=gmag,
+                             yerr=gmagerr,
+                             fmt='.')
             plt.gca().invert_yaxis()
-            plt.xscale("log")
+            plt.grid()
+            plt.xlabel("time since trigger [s]")
+            plt.ylabel("magnitude [mag]")
+            # plt.savefig('/home/foodiq/Documents/diplomka/text_prace/images/stack_example.pdf')
+            # plt.xscale("log")
             plt.show()
         except AttributeError:
             raise RuntimeError("No images to stack selected. Run select_images_to_stack() first.")
@@ -49,8 +59,8 @@ class StackingManager:
     #     pass
 
     def select_images_to_stack(self, sn_limit):
-        "Picks images based on signal to noise specified limit, predicts s/n of images to be stacked to pass the limit"
-        # TODO: time interval limitations
+        """"Picks images based on signal to noise specified limit,
+         predicts s/n of images to be stacked to pass the limit"""
         i = 0
         # TODO: logging INFO stacking amount
 
@@ -114,135 +124,7 @@ class StackingManager:
             raise RuntimeError("Images not stacked. Run stack_images() first.")
 
 
-def stack_until_err_or_limit(image_list, limiting_magnitude_error, grb, max_frames=15):
-    """
-    Stacks images when it runs into image where magnitude error is over limit, tries to stack with next frame,
-    does photometry again, if it passes through limitin error goes to next frame and repeats or adds another image.
-    Maximum amount of images in one stack (through addition of one per cycle of stack + photometry + check)
-    can be specified
-    :param image_list: list of Image type objects sorted by time of exposure ascending
-    :param limiting_magnitude_error: error for passing image as okay without need to stack more or at all
-    :param max_frames: limitin amount of frames so you get better coverage for lightcurve
-    :return: image list with stacked images instead of original ones. Sorted ascending by time
-    """
-    # create temp folder for this stacking procedure with timestamp (for later cleanup)
-    time_init = datetime.now().strftime("%Y_%m_%d_T%H-%M-%S")
-    folder_path = Path("/tmp/stack" + time_init)
-    # TODO: check  or separate to fction???
-    folder_path.mkdir()
-
-    # filter input
-    image_list = _simple_filter_bad_images(image_list, s_n=0.5)
-
-    phot = Transformator([PythonPhotPhotometryTransform([grb])])
-    output_image_list = []
-    i = 0
-    print("len = ", len(image_list))
-    while i < len(image_list):
-        print("i: ", i)
-        image = image_list[i]
-        s_n = image.get_src_flux()[0]/image.get_src_flux()[1]
-        # test this one
-        names = []
-        if "stack" in image.processing_parameters:
-            names = image.get_stack()
-        else:
-            pass
-        # TODO: check the condition (S/N or error)
-
-        if s_n < limiting_magnitude_error:
-            # get some image info for stacked image
-            time_start = image.get_time_jd()
-
-            # for time separation limitation in the future
-            # TODO:
-            exposure = image.get_exposure()
-
-            stacked_image = image
-            header = fits.getheader(stacked_image.get_path())
-            wcs_header = WCS(header)
-            ccddata_repro_stack = ccdproc.CCDData(data=fits.getdata(stacked_image.get_path()),
-                                                  wcs=wcs_header
-                                                  , unit="adu")
-            reprojected = [ccddata_repro_stack]
-
-            n = 1
-            print("pred checkem sn")
-            while s_n < limiting_magnitude_error or n > max_frames:
-                print("sn = ", s_n)
-                n += 1
-
-                # TODO: add time separation condition
-                if n+i >= len(image_list):
-                    print("ende")
-                    # no more images to stack or images time separation is over limit
-                    output_image_list.append(stacked_image)
-                    i += n
-                    break
-                else:
-                    # get image to add info
-                    print("i+n", i+n)
-                    image_to_add = image_list[i+n]
-                    data = fits.getdata(image_to_add.get_path())
-                    header_wcs = fits.getheader(image_to_add.get_path())
-
-                    # create ccd data type image of the one to add
-                    ccddata = ccdproc.CCDData(data, wcs=WCS(header_wcs), unit="adu")
-
-                    # add the image after reprojecting onto first image WCS
-                    reprojected.append(wcs_project(ccddata, wcs_header))
-
-                    # stack images
-                    combiner = ccdproc.Combiner(reprojected)
-                    stacked_image_data = combiner.average_combine()
-                    stacked_image_data.wcs = WCS(header)
-
-                    # get last image data
-                    time_end = image_to_add.get_time_jd() + image_to_add.get_exposure() / 86000
-                    time_jd_mid = (time_start + time_end) / 2
-                    time_coverage = (time_end - time_start) * 86000
-                    # modify header and create new filename
-                    header_wcs["EXPOSURE"] = time_coverage
-                    header["JD"] = time_jd_mid
-                    filename = "stack-" + str(time_jd_mid) + "-e" + "{:.0f}".format(time_coverage) + ".fits"
-
-                    # TODO: saving of stacks for later use? garbage cleaning? (finished list difference with real
-                    #  images in a folder - delete ones that are not in output list after stacking)
-                    # temporary save path
-
-                    file_path = folder_path / filename
-
-                    # new file shenanigans
-                    if os.path.exists(file_path) and CONFIG["OVERWRITE"]:
-                        os.remove(file_path)
-                    fits.writeto(file_path, stacked_image_data, header)
-                    names.append(str(image_to_add.get_path()))
-
-                    # new image object
-                    stacked_image = Image(fixed_parameters={"path": file_path,
-                                                            "exposure": time_coverage,
-                                                            "time_jd": time_jd_mid,
-                                                            "type": "data", "id": filename},
-                                          processing_parameters={"flat": True,
-                                                                 "dark": True,
-                                                                 "stack": names})
-                    # do phot on grb and get s/n of stack to check for improvement
-                    stacked_image = phot.apply(stacked_image)
-                    s_n = stacked_image.get_src_flux()[0] / stacked_image.get_src_flux()[1]
-            # TODO: check for duplicates (last image twice??)
-            print("saved: " + str(stacked_image.get_path()))
-            output_image_list.append(stacked_image)
-            i +=n + 1
-
-        else:
-            # if magnitude or S/N ratio is sufficient append to output without stacking
-            output_image_list.append(image)
-            i += 1
-
-    return output_image_list
-
-
-def stack_two_neighbours(image_list, limiting_magnitude_error, grb, max_reruns=2):
+def _stack_two_neighbours(image_list, limiting_magnitude_error, grb, max_reruns=2):
     """
     Goes  through image list and if it finds image that has higher magnitude error than limit adds the next one to it
     if it is withing limiting time window. Always stacks only two images next to each other. Can be run multiple times
@@ -253,8 +135,8 @@ def stack_two_neighbours(image_list, limiting_magnitude_error, grb, max_reruns=2
     limiting magnitude precision
     :return: image list with stacked images sorted ascending by time
     """
-    # TODO: test
     def pick_images_for_combining_and_pop_them(image_list: [Image], ratio_limit):
+        """ selects pairs of images and returns image lists to stack and single images"""
         images_to_stack = []
         image_list = deepcopy(image_list)
         image_list.sort(key=lambda x: x.get_time_jd())
@@ -274,25 +156,22 @@ def stack_two_neighbours(image_list, limiting_magnitude_error, grb, max_reruns=2
                     i -= 1
             else:
                 i -= 1
-        # print(len(images_to_stack), len(image_list))
         return images_to_stack, image_list
 
     def stack_and_append_to_old(images_to_stack: [[Image]], image_list: [Image]):
-        # print("img flagger for stacking in colors:")
-        # plot_stacks(grb, images_to_stack=images_to_stack, image_list=image_list)
-        # print("stacking")
+        """recombining the two lists into one final"""
+
         for images in images_to_stack:
             image_list.append(stacking_procedure(images))
         return image_list
 
     def phot_redo_temp(image_list: [Image]):
+        """redo photometry on a newly stacked images for a rerun"""
         # phot trans only for grb
         phot = Transformator([PythonPhotPhotometryTransform(grb)])
 
         image_list_phot = []
-        # print("phot")
         for img in image_list:
-            # print("phot for {}".format(img.get_path()))
             image_list_phot.append(phot.apply(img))
         return image_list_phot
 
@@ -308,8 +187,7 @@ def stack_two_neighbours(image_list, limiting_magnitude_error, grb, max_reruns=2
     return image_list
 
 
-def stack_using_sequence(image_list, sequence):
-    # TODO: TEST
+def _stack_using_sequence(image_list, sequence):
     """
     Stacks images according to specified sequence, sequence is a list of numbers saying how many frames it should stack
     next. Example:
@@ -359,10 +237,9 @@ def stack_using_sequence(image_list, sequence):
 
 def _simple_filter_bad_images(image_list, s_n):
     """
-    throw away images that are below rough limiting magnitude precision. Can be e.g. 1mag
-    error or so depending on time of observation after burst trigger.
+    throw away images that are below rough limiting sn.
     :param image_list:
-    :param limiting_magnitude_error:
+    :param s_n: limiting s/n for bad images
     :return:
     """
     return [img for img in image_list if img.get_src_flux()[0]/img.get_src_flux()[1] > s_n]
