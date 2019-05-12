@@ -84,8 +84,11 @@ class StackingManager:
                     sn_sq = src_fluxes[0] ** 2 / src_fluxes[1]
 
                     i += 1
-                self.to_stack.append(stack)
-                self.sn_prediction.append(np.sqrt(sn_sq))
+                if len(stack) > 1:
+                    self.to_stack.append(stack)
+                    self.sn_prediction.append(np.sqrt(sn_sq))
+                else:
+                    self.single_images.append(stack[0])
             else:
                 self.single_images.append(image)
                 i += 1
@@ -101,15 +104,36 @@ class StackingManager:
         except TypeError:
             raise RuntimeError("No images to stack selected. Run select_images_to_stack() first.")
 
-    def stack_images_multicore(self, method, cores=1):
+    def stack_images_multicore(self, cores=1):
         """allows user to paralelize stacking procedure to be run on specified amount of cores,
         defaults to one which is equivalent to reular stack images method"""
-        raise NotImplementedError
+        try:
+            from multiprocessing import Pool
+            p = Pool(processes=cores)
+            res = p.map(stacking_procedure, self.to_stack)
+            self.stacked_images = res
+        except TypeError:
+            raise RuntimeError("No images to stack selected. Run select_images_to_stack() first.")
 
     def save_stacks(self, folder):
         """ when specifying folder moves results of stacking from temporary folder to the specified folder
         modifies path of Image object in stacked_images attribute to be affiliated with new location"""
-        raise NotImplementedError
+        try:
+            import shutil
+            destination_folder = Path(folder)
+            if not (destination_folder.exists() and destination_folder.is_dir()):
+                destination_folder.mkdir(parents=True, exist_ok=True)
+            new_path_images = deepcopy(self.stacked_images)
+            for image in new_path_images:
+                old_path = image.get_path()
+
+                new_path = destination_folder / image.get_path().name
+
+                shutil.copy(old_path, str(destination_folder))
+                image.fixed_parameters['path'] = new_path
+            self.stacked_images = new_path_images
+        except TypeError:
+            raise RuntimeError("No images stacked to copy. Need to create stack first.")
 
     def get_sn_predictions(self):
         return self.sn_prediction
